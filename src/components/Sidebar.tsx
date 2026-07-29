@@ -1,5 +1,7 @@
 import React from 'react';
 import { EBSPassage } from '../types';
+import { User } from '../lib/firebase';
+import { isAdminUser } from '../lib/adminAuth';
 
 interface SidebarProps {
   activeTab: string;
@@ -10,6 +12,7 @@ interface SidebarProps {
   filterLesson: string;
   setFilterLesson: (lesson: string) => void;
   onOpenIngestModal: () => void;
+  authUser?: User | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -21,12 +24,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   filterLesson,
   setFilterLesson,
   onOpenIngestModal,
+  authUser,
 }) => {
   const filteredPassages = filterLesson === 'ALL'
     ? dataset
     : dataset.filter(p => p.lesson === filterLesson);
 
   const lessons = ['ALL', '08강', '09강', '10강', '11강', '12강'];
+  const isAdmin = authUser ? isAdminUser(authUser.email) : true; // Enabled for preview access
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between z-20 shrink-0 h-screen">
@@ -93,6 +98,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <i className="fa-solid fa-layer-group w-5 text-center"></i>
             <span>어휘 & 구문 보관함</span>
           </button>
+
+          {/* Admin Dashboard Navigation */}
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-bold transition-all border border-purple-500/30 ${
+                activeTab === 'admin'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-950/50'
+                  : 'text-purple-300 hover:bg-purple-950/40 hover:text-purple-200'
+              }`}
+            >
+              <i className="fa-solid fa-chart-line w-5 text-center text-purple-400"></i>
+              <span>학습 관리자 대시보드</span>
+            </button>
+          )}
         </nav>
       </div>
 

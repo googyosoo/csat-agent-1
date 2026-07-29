@@ -9,6 +9,7 @@ import { SocraticTab } from './components/SocraticTab';
 import { GeneratorTab } from './components/GeneratorTab';
 import { VocabTab } from './components/VocabTab';
 import { IngestModal } from './components/IngestModal';
+import { AdminDashboardTab } from './components/AdminDashboardTab';
 import { subscribeToAuth, User } from './lib/firebase';
 
 export default function App() {
@@ -67,6 +68,7 @@ export default function App() {
         filterLesson={filterLesson}
         setFilterLesson={setFilterLesson}
         onOpenIngestModal={() => setShowIngestModal(true)}
+        authUser={authUser}
       />
 
       {/* Main Workspace */}
@@ -101,6 +103,7 @@ export default function App() {
             <GeneratorTab selectedPassage={selectedPassage} customApiKey={customApiKey} />
           )}
           {activeTab === 'vocab' && <VocabTab selectedPassage={selectedPassage} onSpeak={speakText} />}
+          {activeTab === 'admin' && <AdminDashboardTab authUser={authUser} />}
         </div>
       </main>
 
