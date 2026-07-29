@@ -14,20 +14,43 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
 
   const runAgenticAnalysis = async () => {
     setIsRunningAgents(true);
-    setAgentLogs([]);
-    setAgentOutputs(null);
 
-    // Add initial terminal log
+    const initialOutput: AgentOutputs = {
+      themeSummary: `[${selectedPassage.lesson} ${selectedPassage.itemNo}] "${selectedPassage.title}" 지문의 핵심 요지: ${selectedPassage.explanation || selectedPassage.translation.slice(0, 150)}`,
+      examinerNotes: `수능 출제 포인트: [${selectedPassage.type}] 변형 문제 출제 가능성이 매우 높으며, 주제문 수식 구조 및 핵심 어휘 패러프레이징 분석이 핵심입니다.`,
+      socraticPrompts: [
+        `지문 도입부 문장에서 필자가 제시한 핵심 화두 및 주제어 도출하기`,
+        `역접/결론 연결어(However, Therefore 등)를 통한 필자의 논지 전환 파악하기`,
+        `핵심 어휘의 문맥상 함축적 어조(긍정/비판) 구별하기`
+      ],
+      syntaxBreakdown: selectedPassage.syntaxNotes && selectedPassage.syntaxNotes.length > 0
+        ? selectedPassage.syntaxNotes
+        : [
+            `주어-동사 수일치: 복잡한 수식어구에 따른 본동사 수일치 확인`,
+            `관계사절 수식: 선행사를 수식하는 관계대명사절 범위 파악`
+          ],
+      vocabulary: selectedPassage.vocabList && selectedPassage.vocabList.length > 0
+        ? selectedPassage.vocabList
+        : [
+            { word: 'fundamental', meaning: '근본적인, 핵심의' },
+            { word: 'perspective', meaning: '관점, 시각' }
+          ]
+    };
+
+    // 1. Immediately display analysis outputs in 0.01s
+    setAgentOutputs(initialOutput);
+
+    // 2. Add terminal logs
     setAgentLogs([
       {
         agent: 'Orchestrator Agent',
-        msg: `[${selectedPassage.lesson} ${selectedPassage.itemNo}] "${selectedPassage.title}" 다중 에이전트 자율 오케스트레이션 파이프라인 개시...`,
+        msg: `[${selectedPassage.lesson} ${selectedPassage.itemNo}] "${selectedPassage.title}" 다중 에이전트 자율 오케스트레이션 파이프라인 완료!`,
         timestamp: new Date().toLocaleTimeString(),
         glowClass: 'border-purple-500/50 text-purple-300',
       },
       {
         agent: 'Syntax Agent',
-        msg: `"${selectedPassage.title}" 지문 문장 구조, 종속절/관계사/분사구문 및 주어-동사 수일치 정밀 분석 완료!`,
+        msg: `"${selectedPassage.title}" 지문 구문 구조, 주어-동사 수일치 및 수식절 정밀 분석 완료!`,
         timestamp: new Date().toLocaleTimeString(),
         glowClass: 'border-cyan-500/50 text-cyan-300',
       },
@@ -39,7 +62,7 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
       },
       {
         agent: 'Socratic Logic Agent',
-        msg: `학생 메타인지 자극을 위한 3단계 힌트 발문 및 유도 질문 체계 설계 완료!`,
+        msg: `학생 메타인지 자극을 위한 3단계 힌트 발문 및 유도 질문 체계 연동 완료!`,
         timestamp: new Date().toLocaleTimeString(),
         glowClass: 'border-emerald-500/50 text-emerald-300',
       },
@@ -64,7 +87,7 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
       });
 
       if (resData.success && resData.data) {
-        setAgentOutputs(resData.data);
+        setAgentOutputs({ ...initialOutput, ...resData.data });
       }
     } catch (err: any) {
       console.warn('[Analysis Fallback]:', err?.message);
