@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { EBSPassage, GeneratedItem } from '../types';
 import { safeFetchJson } from '../lib/api';
+import { recordGeneratorUsage } from '../lib/analytics';
+import { auth } from '../lib/firebase';
 
 interface GeneratorTabProps {
   selectedPassage: EBSPassage;
@@ -38,6 +40,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
 
       if (data.success && data.data) {
         setGeneratedItem(data.data);
+        recordGeneratorUsage(auth.currentUser?.email || 'anonymous');
       } else {
         throw new Error(data.error || '변형 문항 생성 실패');
       }

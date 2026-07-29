@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { EBSPassage, ChatMessage } from '../types';
 import { safeFetchJson } from '../lib/api';
+import { recordSocraticQuestion } from '../lib/analytics';
+import { auth } from '../lib/firebase';
 
 interface SocraticTabProps {
   selectedPassage: EBSPassage;
@@ -21,6 +23,7 @@ export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, custo
   const sendMessage = async () => {
     if (!input.trim() || isThinking) return;
 
+    const currentPromptText = input;
     const userMsg: ChatMessage = { role: 'user', text: input };
     const newHistory = [...chatHistory, userMsg];
     setChatHistory(newHistory);
@@ -44,8 +47,18 @@ export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, custo
       });
 
       const botText = data.success ? data.text : `오류: ${data.error || '답변 생성 실패'}`;
-
       setChatHistory([...newHistory, { role: 'model', text: botText }]);
+
+      // Record Socratic analytics
+      recordSocraticQuestion({
+        studentEmail: auth.currentUser?.email,
+        studentName: auth.currentUser?.displayName,
+        passageTitle: selectedPassage.title,
+        lesson: selectedPassage.lesson,
+        itemNo: selectedPassage.itemNo,
+        questionText: currentPromptText,
+        hintLevel,
+      });
     } catch (err: any) {
       setChatHistory([...newHistory, { role: 'model', text: `오류가 발생했습니다: ${err.message}` }]);
     } finally {

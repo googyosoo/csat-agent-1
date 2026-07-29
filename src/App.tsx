@@ -13,6 +13,8 @@ import { AdminDashboardTab } from './components/AdminDashboardTab';
 import { subscribeToAuth, logout, User } from './lib/firebase';
 import { validateUserAccess, ALLOWED_STUDENT_DOMAIN, ADMIN_EMAILS } from './lib/adminAuth';
 
+import { recordUserLogin } from './lib/analytics';
+
 export default function App() {
   const [dataset, setDataset] = useState<EBSPassage[]>(INITIAL_EBS_DATASET);
   const [activeTab, setActiveTab] = useState('library');
@@ -34,6 +36,7 @@ export default function App() {
           await logout();
           return;
         }
+        recordUserLogin(user);
       }
       setDeniedReason(null);
       setAuthUser(user);
