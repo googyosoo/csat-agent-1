@@ -10,7 +10,8 @@ import { GeneratorTab } from './components/GeneratorTab';
 import { VocabTab } from './components/VocabTab';
 import { IngestModal } from './components/IngestModal';
 import { AdminDashboardTab } from './components/AdminDashboardTab';
-import { subscribeToAuth, User } from './lib/firebase';
+import { subscribeToAuth, logout, User } from './lib/firebase';
+import { validateUserAccess, ALLOWED_STUDENT_DOMAIN, ADMIN_EMAILS } from './lib/adminAuth';
 
 export default function App() {
   const [dataset, setDataset] = useState<EBSPassage[]>(INITIAL_EBS_DATASET);
@@ -21,9 +22,20 @@ export default function App() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [showIngestModal, setShowIngestModal] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [deniedReason, setDeniedReason] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeToAuth((user) => {
+    const unsubscribe = subscribeToAuth(async (user) => {
+      if (user) {
+        const access = validateUserAccess(user.email);
+        if (!access.allowed) {
+          setDeniedReason(access.reason || '접근이 허용되지 않는 계정입니다.');
+          setAuthUser(null);
+          await logout();
+          return;
+        }
+      }
+      setDeniedReason(null);
       setAuthUser(user);
     });
     return () => unsubscribe();
@@ -114,6 +126,32 @@ export default function App() {
           onAddPassage={handleAddPassage}
           customApiKey={customApiKey}
         />
+      )}
+
+      {/* Access Denied Modal */}
+      {deniedReason && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-2xl mx-auto font-bold border border-rose-500/30">
+              <i className="fa-solid fa-user-shield"></i>
+            </div>
+            <h3 className="text-base font-bold text-white">로그인 계정 접근 제한 안내</h3>
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3.5 rounded-2xl border border-slate-800 font-sans">
+              {deniedReason}
+            </p>
+            <div className="text-[11px] text-slate-400 space-y-1 text-left bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+              <div className="font-bold text-slate-300">💡 로그인 허용 정책:</div>
+              <div>• <strong>일반 학습자(학생)</strong>: <code className="text-cyan-300 font-mono">@simin.hs.kr</code> 계정 전용</div>
+              <div>• <strong>지정 관리자</strong>: 지정 이메일 3개 계정 허용 (도메인 무관)</div>
+            </div>
+            <button
+              onClick={() => setDeniedReason(null)}
+              className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-rose-950/50 transition-all"
+            >
+              확인 및 닫기
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

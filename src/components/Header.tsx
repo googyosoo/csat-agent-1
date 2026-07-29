@@ -112,14 +112,20 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
           ) : (
-            <button
-              onClick={handleGoogleLogin}
-              disabled={isLoggingIn}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center space-x-2 transition-all shadow-md shadow-blue-900/30 disabled:opacity-50"
-            >
-              <i className={`fa-brands fa-google ${isLoggingIn ? 'fa-spin' : ''}`}></i>
-              <span>{isLoggingIn ? '로그인 중...' : 'Google 로그인'}</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <span className="hidden xl:inline text-[11px] text-slate-400 font-mono bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                학습자: @simin.hs.kr
+              </span>
+              <button
+                onClick={handleGoogleLogin}
+                disabled={isLoggingIn}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center space-x-2 transition-all shadow-md shadow-blue-900/30 disabled:opacity-50"
+                title="시민고등학교 계정(@simin.hs.kr) 또는 지정 관리자 이메일 전용"
+              >
+                <i className={`fa-brands fa-google ${isLoggingIn ? 'fa-spin' : ''}`}></i>
+                <span>{isLoggingIn ? '로그인 중...' : 'Google 로그인'}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
