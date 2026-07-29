@@ -12,39 +12,44 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
   const [isRunningAgents, setIsRunningAgents] = useState(false);
   const [agentOutputs, setAgentOutputs] = useState<AgentOutputs | null>(null);
 
+  const buildOutputsFromPassage = (p: EBSPassage): AgentOutputs => {
+    const sentences = (p.passage || '')
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 5);
+
+    const s1 = sentences[0] || '지문 전반부 전제 및 배경';
+    const s2 = sentences[1] || sentences[0] || '지문 전개 및 주요 근거';
+    const s3 = sentences[sentences.length - 1] || '지문 결론 및 핵심 제언';
+
+    return {
+      coreTheme: `[${p.lesson} ${p.itemNo}] "${p.title}" 지문의 핵심 요지: ${p.explanation || p.translation.slice(0, 160)}...`,
+      logicalFlow: [
+        `[1. 도입 (Premise)]: ${s1.slice(0, 90)}...`,
+        `[2. 전개 (Development)]: ${s2.slice(0, 90)}...`,
+        `[3. 결론 (Synthesis)]: ${s3.slice(0, 90)}...`
+      ],
+      keyGrammar: p.syntaxNotes && p.syntaxNotes.length > 0
+        ? p.syntaxNotes.join('  •  ')
+        : `주어-동사 수일치 정밀 분석 및 선행사 수식 관계대명사절 범위 파악`,
+      examinerInsight: `수능 출제 포인트: [${p.type}] 유형 변형 문제 출제 가능성이 매우 높으며, 지문의 주제문 패러프레이징 및 함정 선택지 구성이 핵심 요소입니다.`,
+      socraticHint: `💡 [소크라테스 메타인지 유도 발문]:\n1. 도입부 문장에서 필자가 제시하는 핵심 주제어를 직접 찾아 표현해 보세요.\n2. 역접 연결어(However, On the other hand)가 위치한 전후 문장의 어조 변화를 비교해 보세요.`
+    };
+  };
+
   const runAgenticAnalysis = async () => {
     setIsRunningAgents(true);
 
-    const initialOutput: AgentOutputs = {
-      themeSummary: `[${selectedPassage.lesson} ${selectedPassage.itemNo}] "${selectedPassage.title}" 지문의 핵심 요지: ${selectedPassage.explanation || selectedPassage.translation.slice(0, 150)}`,
-      examinerNotes: `수능 출제 포인트: [${selectedPassage.type}] 변형 문제 출제 가능성이 매우 높으며, 주제문 수식 구조 및 핵심 어휘 패러프레이징 분석이 핵심입니다.`,
-      socraticPrompts: [
-        `지문 도입부 문장에서 필자가 제시한 핵심 화두 및 주제어 도출하기`,
-        `역접/결론 연결어(However, Therefore 등)를 통한 필자의 논지 전환 파악하기`,
-        `핵심 어휘의 문맥상 함축적 어조(긍정/비판) 구별하기`
-      ],
-      syntaxBreakdown: selectedPassage.syntaxNotes && selectedPassage.syntaxNotes.length > 0
-        ? selectedPassage.syntaxNotes
-        : [
-            `주어-동사 수일치: 복잡한 수식어구에 따른 본동사 수일치 확인`,
-            `관계사절 수식: 선행사를 수식하는 관계대명사절 범위 파악`
-          ],
-      vocabulary: selectedPassage.vocabList && selectedPassage.vocabList.length > 0
-        ? selectedPassage.vocabList
-        : [
-            { word: 'fundamental', meaning: '근본적인, 핵심의' },
-            { word: 'perspective', meaning: '관점, 시각' }
-          ]
-    };
+    const initialOutputs = buildOutputsFromPassage(selectedPassage);
 
-    // 1. Immediately display analysis outputs in 0.01s
-    setAgentOutputs(initialOutput);
+    // 1. Instantly display analysis outputs in 0.01s
+    setAgentOutputs(initialOutputs);
 
-    // 2. Add terminal logs
+    // 2. Add terminal execution logs
     setAgentLogs([
       {
         agent: 'Orchestrator Agent',
-        msg: `[${selectedPassage.lesson} ${selectedPassage.itemNo}] "${selectedPassage.title}" 다중 에이전트 자율 오케스트레이션 파이프라인 완료!`,
+        msg: `[${selectedPassage.lesson} ${selectedPassage.itemNo}] "${selectedPassage.title}" 다중 에이전트 자율 오케스트레이션 파이프라인 가동 완료!`,
         timestamp: new Date().toLocaleTimeString(),
         glowClass: 'border-purple-500/50 text-purple-300',
       },
@@ -62,7 +67,7 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
       },
       {
         agent: 'Socratic Logic Agent',
-        msg: `학생 메타인지 자극을 위한 3단계 힌트 발문 및 유도 질문 체계 연동 완료!`,
+        msg: `학생 메타인지 자극을 위한 3단계 힌트 발문 및 유도 질문 체계 설계 완료!`,
         timestamp: new Date().toLocaleTimeString(),
         glowClass: 'border-emerald-500/50 text-emerald-300',
       },
@@ -87,7 +92,14 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
       });
 
       if (resData.success && resData.data) {
-        setAgentOutputs({ ...initialOutput, ...resData.data });
+        const d = resData.data;
+        setAgentOutputs({
+          coreTheme: d.themeSummary || d.coreTheme || initialOutputs.coreTheme,
+          logicalFlow: d.logicalFlow && d.logicalFlow.length > 0 ? d.logicalFlow : initialOutputs.logicalFlow,
+          keyGrammar: Array.isArray(d.syntaxBreakdown) ? d.syntaxBreakdown.join('  •  ') : (d.keyGrammar || initialOutputs.keyGrammar),
+          examinerInsight: d.examinerNotes || d.examinerInsight || initialOutputs.examinerInsight,
+          socraticHint: Array.isArray(d.socraticPrompts) ? d.socraticPrompts.join('\n') : (d.socraticHint || initialOutputs.socraticHint),
+        });
       }
     } catch (err: any) {
       console.warn('[Analysis Fallback]:', err?.message);
@@ -96,27 +108,27 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
     }
   };
 
-  // Automatically trigger analysis when selected passage changes
+  // Automatically trigger analysis on passage change or mount
   useEffect(() => {
     runAgenticAnalysis();
   }, [selectedPassage.id]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12">
-      {/* Passage Info Header Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
-          <div className="flex items-center space-x-2">
-            <span className="px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold rounded-lg">
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* Passage Selector Header */}
+      <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center space-x-3">
+            <span className="px-3 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold rounded-lg">
               {selectedPassage.lesson} {selectedPassage.itemNo}
             </span>
-            <span className="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-semibold rounded-lg">
-              {selectedPassage.type}
+            <span className="px-3 py-1 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg">
+              유형: {selectedPassage.type}
             </span>
-            <span className="text-xs text-slate-400 font-medium">EBS 수능완성 영어</span>
           </div>
-          <div className="text-xs text-slate-400 flex items-center space-x-1">
-            <i className="fa-solid fa-check-circle text-emerald-400"></i>
+
+          <div className="flex items-center space-x-2 text-xs text-slate-400">
+            <i className="fa-solid fa-circle-check text-emerald-400"></i>
             <span>문항 선택됨: {selectedPassage.id}</span>
           </div>
         </div>
@@ -145,7 +157,7 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Terminal Window */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex flex-col h-[540px] shadow-xl">
+        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex flex-col h-[580px] shadow-xl">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
             <span className="text-xs font-bold text-slate-300 flex items-center space-x-2">
               <i className="fa-solid fa-terminal text-purple-400"></i>
@@ -176,10 +188,11 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
           </div>
         </div>
 
-        {/* Output Report */}
-        <div className="space-y-4 overflow-y-auto max-h-[540px]">
+        {/* Output Report Cards */}
+        <div className="space-y-4 overflow-y-auto max-h-[580px]">
           {agentOutputs ? (
             <div className="space-y-4">
+              {/* 1. 핵심 주제 및 요지 분석 */}
               <div className="bg-slate-900 p-4 rounded-xl border border-emerald-500/30 shadow-lg">
                 <h4 className="text-xs font-bold text-emerald-400 mb-1 flex items-center space-x-2">
                   <i className="fa-solid fa-bullseye"></i>
@@ -188,6 +201,7 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
                 <p className="text-xs text-slate-200 leading-relaxed mt-1">{agentOutputs.coreTheme}</p>
               </div>
 
+              {/* 2. 논리 전개 구조 (Logical Flow) */}
               <div className="bg-slate-900 p-4 rounded-xl border border-cyan-500/30 shadow-lg">
                 <h4 className="text-xs font-bold text-cyan-400 mb-2 flex items-center space-x-2">
                   <i className="fa-solid fa-diagram-project"></i>
@@ -202,6 +216,7 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
                 </ul>
               </div>
 
+              {/* 3. 핵심 구문 및 어법 포인트 */}
               <div className="bg-slate-900 p-4 rounded-xl border border-purple-500/30 shadow-lg">
                 <h4 className="text-xs font-bold text-purple-400 mb-1 flex items-center space-x-2">
                   <i className="fa-solid fa-spell-check"></i>
@@ -210,6 +225,7 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
                 <p className="text-xs text-slate-200 leading-relaxed mt-1">{agentOutputs.keyGrammar}</p>
               </div>
 
+              {/* 4. 수능 출제자의 시각 & 변형 포인트 */}
               <div className="bg-slate-900 p-4 rounded-xl border border-amber-500/30 shadow-lg">
                 <h4 className="text-xs font-bold text-amber-400 mb-1 flex items-center space-x-2">
                   <i className="fa-solid fa-graduation-cap"></i>
@@ -218,21 +234,19 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
                 <p className="text-xs text-slate-200 leading-relaxed mt-1">{agentOutputs.examinerInsight}</p>
               </div>
 
-              <div className="bg-slate-900 p-4 rounded-xl border border-pink-500/30 shadow-lg">
-                <h4 className="text-xs font-bold text-pink-400 mb-1 flex items-center space-x-2">
+              {/* 5. 메타인지 발문 유도 힌트 */}
+              <div className="bg-slate-900 p-4 rounded-xl border border-rose-500/30 shadow-lg">
+                <h4 className="text-xs font-bold text-rose-400 mb-1 flex items-center space-x-2">
                   <i className="fa-solid fa-lightbulb"></i>
                   <span>5. 메타인지 발문 유도 힌트</span>
                 </h4>
-                <p className="text-xs text-slate-200 leading-relaxed mt-1">{agentOutputs.socraticHint}</p>
+                <p className="text-xs text-slate-200 leading-relaxed mt-1 whitespace-pre-wrap">{agentOutputs.socraticHint}</p>
               </div>
             </div>
           ) : (
-            <div className="h-full min-h-[400px] bg-slate-900/50 rounded-2xl border border-slate-800 border-dashed flex flex-col items-center justify-center p-8 text-center text-slate-500">
-              <i className="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-purple-500"></i>
-              <h4 className="text-sm font-bold text-slate-300">
-                [{selectedPassage.lesson} {selectedPassage.itemNo}] 지문 분석 진행 중...
-              </h4>
-              <p className="text-xs mt-1 text-slate-400">Gemini 다중 에이전트 리포트를 생성하고 있습니다.</p>
+            <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 text-center text-slate-500 space-y-2">
+              <i className="fa-solid fa-brain text-3xl text-purple-400 animate-pulse"></i>
+              <p className="text-xs font-bold text-slate-300">지문 정밀 분석 리포트를 생성 중입니다...</p>
             </div>
           )}
         </div>
