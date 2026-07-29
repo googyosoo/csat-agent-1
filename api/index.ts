@@ -1,14 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import express from 'express';
 import dotenv from 'dotenv';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// Clean JSON helper
 function cleanJsonString(str: string): string {
   if (!str) return '';
   let cleaned = str.trim();
@@ -57,6 +56,32 @@ function buildSocraticFallbackResponse(history: any[], passage: string, translat
   }
   return `[소크라테스 튜터] 질문하신 "${lastUserMsg}" 내용에 대해 [${displayLesson} ${displayItemNo}] 지문을 바탕으로 함께 추론해 봅시다!\n\n주요 분석 문장: "${s1}"\n\n💡 [소크라테스 유도 질문]: 본인이 구문 분석을 통해 파악한 핵심 논지를 설명해 보세요!`;
 }
+
+// Analyze Endpoint
+app.post('/api/gemini/analyze', async (req, res) => {
+  const { passage = '', lesson = '', itemNo = '', title = '', type = '', translation = '', explanation = '', customApiKey } = req.body;
+  try {
+    const ai = getGenAIClient(customApiKey);
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: [{ role: 'user', parts: [{ text: `Analyze CSAT passage: ${passage}` }] }],
+    });
+    const json = JSON.parse(cleanJsonString(response.text || '{}'));
+    res.json({ success: true, data: json });
+  } catch {
+    res.json({
+      success: true,
+      data: {
+        themeSummary: `[${lesson} ${itemNo}] "${title}" 지문은 학술적 핵심 주제와 논리적 전개를 다루는 수능 연계 주요 지문입니다.`,
+        examinerNotes: '수능 출제 포인트: 주제문 수식 구조 및 핵심어 패러프레이징 선택지 분석',
+        socraticPrompts: ['지문 도입부의 핵심 명사구 파악하기', '후반부 결론 문장과의 유기적 연결성 검증'],
+        syntaxBreakdown: ['주어-동사 수일치 확인', '관계대명사절 및 분사구문 수식 범위 구별'],
+        vocabulary: [{ word: 'fundamental', meaning: '근본적인' }, { word: 'perspective', meaning: '관점' }],
+      },
+      fallback: true,
+    });
+  }
+});
 
 // Socratic Endpoint
 app.post('/api/gemini/socratic', async (req, res) => {
@@ -110,7 +135,7 @@ app.post('/api/gemini/transform', async (req, res) => {
 
 // Student Report Endpoint
 app.post('/api/gemini/student-report', async (req, res) => {
-  const { student, socraticLogs = [] } = req.body;
+  const { student } = req.body;
   const name = student?.name || '김학생';
   const sampleSetek = `'2027 진로영어' 지문 분석 워크북과 소크라테스 AI 튜터를 적극 활용하여 영어 독해력과 지문 구조 파악 능력을 종합적으로 신장함. 특히 EBS 수능 연계 지문 학습 과정에서 가주어-진주어 구문 및 역접 연결어를 통한 논지 전환 파악에 남다른 메타인지적 탐구열을 보임. 소크라테스 튜터링 3단계 힌트 시스템을 단계별로 탐색하며 스스로 문맥상 어휘의 함축적 의미를 도출해내는 주도적인 학습 태도를 형성함. 수능 변형문제 생성기 기능을 응용하여 빈칸 추론 및 어법성 판단 문항을 직접 풀이하고 분석함으로써 텍스트의 논리적 결속성을 파악하는 비판적 사고력이 매우 우수함.`;
 
