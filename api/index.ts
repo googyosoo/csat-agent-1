@@ -177,10 +177,18 @@ ${translation}
 
 Respond in warm, encouraging, elegant Korean teacher tone.`;
 
-    const userPrompt = `Student Question / Conversation History:
-${JSON.stringify(history.slice(-4))}
+    const lastMsgText = history?.filter((m: any) => m.role === 'user').pop()?.text || '지문 핵심 분석해줘';
 
-Analyze and respond specifically regarding the selected passage "${displayTitle}".`;
+    const userPrompt = `[학생의 질문]: "${lastMsgText}"
+
+[학생이 선택한 지문 정보]:
+- 강/번호: ${displayLesson} ${displayItemNo} (${displayTitle})
+- 영문 원문 지문:
+${passage || 'The internet allows information to flow freely across national borders. However, unchecked algorithms can create filter bubbles that restrict exposure to diverse perspectives.'}
+- 직독직해 한국어 번역:
+${translation || '인터넷은 정보가 국경을 넘어 자유롭게 흐르도록 합니다. 그러나 검증되지 않은 알고리즘은 필터 버블을 생성하여 다양한 관점에 대한 노출을 제한할 수 있습니다.'}
+
+학생의 질문 "${lastMsgText}"에 대해 위 선택 지문을 직접 인용하여 힌트 레벨 ${hintLevel}단계에 맞게 친절하고 전문적인 소크라테스 유도 발문으로 답변하세요. 지문을 새로 공유해 달라는 말을 절대로 하지 마세요!`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.6-flash',
