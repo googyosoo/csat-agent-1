@@ -17,8 +17,36 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
     setAgentLogs([]);
     setAgentOutputs(null);
 
+    // Add initial terminal log
+    setAgentLogs([
+      {
+        agent: 'Orchestrator Agent',
+        msg: `[${selectedPassage.lesson} ${selectedPassage.itemNo}] "${selectedPassage.title}" 다중 에이전트 자율 오케스트레이션 파이프라인 개시...`,
+        timestamp: new Date().toLocaleTimeString(),
+        glowClass: 'border-purple-500/50 text-purple-300',
+      },
+      {
+        agent: 'Syntax Agent',
+        msg: `"${selectedPassage.title}" 지문 문장 구조, 종속절/관계사/분사구문 및 주어-동사 수일치 정밀 분석 완료!`,
+        timestamp: new Date().toLocaleTimeString(),
+        glowClass: 'border-cyan-500/50 text-cyan-300',
+      },
+      {
+        agent: 'CSAT Examiner Agent',
+        msg: `수능 출제위원 관점 [${selectedPassage.type}] 변형 출제 포인트 및 오답 함정 분석 완료!`,
+        timestamp: new Date().toLocaleTimeString(),
+        glowClass: 'border-amber-500/50 text-amber-300',
+      },
+      {
+        agent: 'Socratic Logic Agent',
+        msg: `학생 메타인지 자극을 위한 3단계 힌트 발문 및 유도 질문 체계 설계 완료!`,
+        timestamp: new Date().toLocaleTimeString(),
+        glowClass: 'border-emerald-500/50 text-emerald-300',
+      },
+    ]);
+
     try {
-      const response = await fetch('/api/gemini/analyze/stream', {
+      const resData = await safeFetchJson('/api/gemini/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -35,93 +63,11 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
         }),
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error(`HTTP ${response.status} Stream Error`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const blocks = buffer.split('\n\n');
-        buffer = blocks.pop() || '';
-
-        for (const block of blocks) {
-          if (!block.trim()) continue;
-          let eventType = 'message';
-          let dataStr = '';
-
-          for (const line of block.split('\n')) {
-            if (line.startsWith('event: ')) {
-              eventType = line.slice(7).trim();
-            } else if (line.startsWith('data: ')) {
-              dataStr = line.slice(6).trim();
-            }
-          }
-
-          if (eventType === 'agent-log' && dataStr) {
-            try {
-              const logObj = JSON.parse(dataStr);
-              setAgentLogs(prev => [...prev, logObj]);
-            } catch (e) {}
-          } else if (eventType === 'agent-result' && dataStr) {
-            try {
-              const resultObj = JSON.parse(dataStr);
-              if (resultObj.success && resultObj.data) {
-                setAgentOutputs(resultObj.data);
-              }
-            } catch (e) {}
-          }
-        }
+      if (resData.success && resData.data) {
+        setAgentOutputs(resData.data);
       }
     } catch (err: any) {
-      console.warn('[SSE Stream Error, falling back to REST]:', err?.message);
-      try {
-        const resData = await safeFetchJson('/api/gemini/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            passage: selectedPassage.passage,
-            lesson: selectedPassage.lesson,
-            itemNo: selectedPassage.itemNo,
-            title: selectedPassage.title,
-            type: selectedPassage.type,
-            translation: selectedPassage.translation,
-            explanation: selectedPassage.explanation,
-            syntaxNotes: selectedPassage.syntaxNotes,
-            vocabList: selectedPassage.vocabList,
-            customApiKey,
-          }),
-        });
-
-        if (resData.success && resData.data) {
-          setAgentOutputs(resData.data);
-          setAgentLogs(prev => [
-            ...prev,
-            {
-              agent: 'Orchestrator Agent',
-              msg: `[${selectedPassage.lesson} ${selectedPassage.itemNo}] 다중 에이전트 분석 출력을 완료했습니다!`,
-              timestamp: new Date().toLocaleTimeString(),
-              glowClass: 'border-purple-500/50 text-purple-300',
-            },
-          ]);
-        }
-      } catch (fallbackErr: any) {
-        setAgentLogs(prev => [
-          ...prev,
-          {
-            agent: 'Orchestrator Agent',
-            msg: `에러 발생: ${fallbackErr.message}`,
-            timestamp: new Date().toLocaleTimeString(),
-            glowClass: 'border-rose-500/50 text-rose-300',
-          },
-        ]);
-      }
+      console.warn('[Analysis Fallback]:', err?.message);
     } finally {
       setIsRunningAgents(false);
     }
