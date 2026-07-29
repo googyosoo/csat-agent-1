@@ -7,6 +7,7 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 // Firebase configuration using Vite environment variables with fallback
 const firebaseConfig = {
@@ -21,6 +22,7 @@ const firebaseConfig = {
 // Initialize Firebase App singleton
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 // Google Authentication Provider
 const googleProvider = new GoogleAuthProvider();

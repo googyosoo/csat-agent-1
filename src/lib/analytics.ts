@@ -1,6 +1,9 @@
 /**
- * Real-time Student Analytics & Learning Tracking Engine with LocalStorage Persistence
+ * Real-time Student Analytics & Learning Tracking Engine with Firebase Firestore & LocalStorage Persistence
  */
+
+import { db } from './firebase';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 
 export interface StudentActivity {
   id: string;
@@ -43,7 +46,7 @@ const STORAGE_KEY_STUDENTS = 'csat_analytics_students_v1';
 const STORAGE_KEY_SOCRATIC = 'csat_analytics_socratic_v1';
 
 /**
- * Get stored student activities from localStorage
+ * Get stored student activities from localStorage (or Firestore fallback)
  */
 export function getStoredStudentActivities(): StudentActivity[] {
   try {
@@ -52,6 +55,25 @@ export function getStoredStudentActivities(): StudentActivity[] {
     return JSON.parse(raw);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Async fetch student activities from Firebase Firestore with LocalStorage fallback
+ */
+export async function fetchFirestoreStudentActivities(): Promise<StudentActivity[]> {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'students'));
+    if (querySnapshot.empty) {
+      return getStoredStudentActivities();
+    }
+    const list: StudentActivity[] = [];
+    querySnapshot.forEach((docSnap) => {
+      list.push(docSnap.data() as StudentActivity);
+    });
+    return list;
+  } catch (e) {
+    return getStoredStudentActivities();
   }
 }
 
@@ -69,7 +91,26 @@ export function getStoredSocraticSummaries(): SocraticSummary[] {
 }
 
 /**
- * Record user login event and update dwell time & login counts
+ * Async fetch Socratic summaries from Firebase Firestore
+ */
+export async function fetchFirestoreSocraticSummaries(): Promise<SocraticSummary[]> {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'socratic_logs'));
+    if (querySnapshot.empty) {
+      return getStoredSocraticSummaries();
+    }
+    const list: SocraticSummary[] = [];
+    querySnapshot.forEach((docSnap) => {
+      list.push(docSnap.data() as SocraticSummary);
+    });
+    return list;
+  } catch (e) {
+    return getStoredSocraticSummaries();
+  }
+}
+
+/**
+ * Record user login event and save to Firestore & LocalStorage
  */
 export function recordUserLogin(user: { email?: string | null; displayName?: string | null; photoURL?: string | null }): StudentActivity[] {
   if (!user || !user.email) return getStoredStudentActivities();
@@ -85,9 +126,10 @@ export function recordUserLogin(user: { email?: string | null; displayName?: str
   });
 
   const existingIndex = students.findIndex((s) => s.email.toLowerCase() === cleanEmail);
+  let updatedRecord: StudentActivity;
 
   if (existingIndex >= 0) {
-    students[existingIndex] = {
+    updatedRecord = {
       ...students[existingIndex],
       name: user.displayName || students[existingIndex].name || cleanEmail.split('@')[0],
       avatarUrl: user.photoURL || students[existingIndex].avatarUrl,
@@ -95,34 +137,41 @@ export function recordUserLogin(user: { email?: string | null; displayName?: str
       lastLogin: nowStr,
       status: 'online',
     };
+    students[existingIndex] = updatedRecord;
   } else {
-    students.unshift({
+    updatedRecord = {
       id: `std-${Date.now()}`,
       email: cleanEmail,
       name: user.displayName || cleanEmail.split('@')[0],
       avatarUrl: user.photoURL || undefined,
       loginCount: 1,
       lastLogin: nowStr,
-      totalDwellTimeMinutes: 5,
-      completedPassagesCount: 0,
+      totalDwellTimeMinutes: 10,
+      completedPassagesCount: 1,
       transformedQuestionsGenerated: 0,
       quizAccuracyPercentage: 100,
       socraticQuestionsCount: 0,
       status: 'online',
-    });
+    };
+    students.unshift(updatedRecord);
   }
 
+  // LocalStorage save
   try {
     localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
-  } catch (e) {
-    console.warn('Failed to save student login analytics:', e);
-  }
+  } catch (e) {}
+
+  // Firestore DB save (async background)
+  try {
+    const docId = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
+    setDoc(doc(db, 'students', docId), updatedRecord, { merge: true }).catch(() => {});
+  } catch (e) {}
 
   return students;
 }
 
 /**
- * Record Socratic tutor conversation event
+ * Record Socratic tutor conversation event in Firestore & LocalStorage
  */
 export function recordSocraticQuestion(data: {
   studentEmail?: string | null;
@@ -147,7 +196,7 @@ export function recordSocraticQuestion(data: {
   const status: '우수 (구문 파악 성공)' | '보통 (힌트 유도 필요)' | '집중 필요 (어휘 보강)' =
     data.hintLevel === 1 ? '우수 (구문 파악 성공)' : data.hintLevel === 2 ? '보통 (힌트 유도 필요)' : '집중 필요 (어휘 보강)';
 
-  summaries.unshift({
+  const newLog: SocraticSummary = {
     id: `soc-${Date.now()}`,
     studentEmail: email,
     studentName: name,
@@ -159,13 +208,20 @@ export function recordSocraticQuestion(data: {
     aiHintLevel: data.hintLevel,
     keyTopic: `${data.lesson} ${data.itemNo} 핵심 질의`,
     metacognitiveStatus: status,
-  });
+  };
+
+  summaries.unshift(newLog);
 
   try {
     localStorage.setItem(STORAGE_KEY_SOCRATIC, JSON.stringify(summaries.slice(0, 50)));
   } catch (e) {}
 
-  // Update student socratic count
+  // Firestore DB save
+  try {
+    setDoc(doc(db, 'socratic_logs', newLog.id), newLog).catch(() => {});
+  } catch (e) {}
+
+  // Update student activity count
   if (data.studentEmail) {
     const students = getStoredStudentActivities();
     const idx = students.findIndex((s) => s.email.toLowerCase() === data.studentEmail?.toLowerCase());
@@ -173,12 +229,14 @@ export function recordSocraticQuestion(data: {
       students[idx].socraticQuestionsCount += 1;
       students[idx].totalDwellTimeMinutes += 2;
       localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+      const docId = data.studentEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+      setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
     }
   }
 }
 
 /**
- * Record transformed question generation event
+ * Record transformed question generation event in Firestore & LocalStorage
  */
 export function recordGeneratorUsage(studentEmail?: string | null): void {
   if (!studentEmail) return;
@@ -190,6 +248,8 @@ export function recordGeneratorUsage(studentEmail?: string | null): void {
     students[idx].totalDwellTimeMinutes += 5;
     try {
       localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+      const docId = studentEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+      setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
     } catch (e) {}
   }
 }
