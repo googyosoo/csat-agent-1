@@ -26,11 +26,8 @@ function cleanJsonString(str: string): string {
 function getGenAIClient(customApiKey?: string) {
   const apiKey = (customApiKey && typeof customApiKey === 'string' && customApiKey.trim().length > 0)
     ? customApiKey.trim()
-    : process.env.GEMINI_API_KEY;
+    : (process.env.GEMINI_API_KEY || 'dummy_gemini_api_key_for_fallback_engine');
 
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY environment variable or custom API key is required');
-  }
   return new GoogleGenAI({
     apiKey,
     httpOptions: {
