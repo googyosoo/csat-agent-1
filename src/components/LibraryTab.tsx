@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { EBSPassage } from '../types';
+import { recordStudentReflection } from '../lib/analytics';
+import { auth } from '../lib/firebase';
 
 interface LibraryTabProps {
   selectedPassage: EBSPassage;
@@ -15,14 +17,34 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
   onStopSpeak,
 }) => {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [reflectionInput, setReflectionInput] = useState('');
+  const [isSavedReflection, setIsSavedReflection] = useState(false);
 
-  // Reset selected option when passage changes
+  // Reset selected option & reflection state when passage changes
   useEffect(() => {
     setSelectedOption(null);
+    setReflectionInput('');
+    setIsSavedReflection(false);
   }, [selectedPassage.id]);
 
   const isAnswered = selectedOption !== null;
   const isCorrect = selectedOption === selectedPassage.answerIndex;
+
+  const handleSaveReflection = () => {
+    if (!reflectionInput.trim()) return;
+
+    recordStudentReflection({
+      studentEmail: auth.currentUser?.email,
+      studentName: auth.currentUser?.displayName,
+      passageId: selectedPassage.id,
+      lesson: selectedPassage.lesson,
+      itemNo: selectedPassage.itemNo,
+      passageTitle: selectedPassage.title,
+      reflectionText: reflectionInput,
+    });
+
+    setIsSavedReflection(true);
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -40,107 +62,67 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
             {isSpeaking ? (
               <button
                 onClick={onStopSpeak}
-                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-rose-950/50 flex items-center space-x-2 transition-all animate-pulse"
-                title="음성 리딩 즉시 멈춤"
+                className="px-3.5 py-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-bold rounded-xl hover:bg-rose-500/30 transition-all flex items-center space-x-2"
               >
-                <i className="fa-solid fa-circle-stop"></i>
-                <span>리딩 멈춤</span>
+                <i className="fa-solid fa-volume-xmark"></i>
+                <span>낭독 중지</span>
               </button>
             ) : (
               <button
                 onClick={() => onSpeak && onSpeak(selectedPassage.passage)}
-                className="px-3.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 rounded-xl text-xs font-bold border border-blue-500/30 flex items-center space-x-2 transition-all"
-                title="지문 전체 원어민 발음 리딩"
+                className="px-3.5 py-1.5 bg-blue-600/20 text-blue-300 border border-blue-500/40 text-xs font-bold rounded-xl hover:bg-blue-600/30 transition-all flex items-center space-x-2"
               >
-                <i className="fa-solid fa-volume-high text-blue-400"></i>
-                <span>지문 음성 리딩</span>
+                <i className="fa-solid fa-volume-high"></i>
+                <span>원문 AI 낭독</span>
               </button>
             )}
-
-            <span className="text-xs font-mono text-slate-400 bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-700">
-              ID: {selectedPassage.id}
-            </span>
           </div>
         </div>
 
-        {/* Box Sentence if available (주어진 문장의 위치 등) */}
-        {selectedPassage.boxSentence && (
-          <div className="mb-4 p-4 bg-amber-950/40 border border-amber-500/40 rounded-xl text-amber-200 text-sm leading-relaxed font-serif">
-            <span className="font-bold text-amber-400 block mb-1 text-xs uppercase tracking-wider">[주어진 문장 Box]</span>
-            {selectedPassage.boxSentence}
-          </div>
-        )}
-
-        {/* Summary Sentence if available (요약문 완성 등) */}
-        {selectedPassage.summarySentence && (
-          <div className="mb-4 p-4 bg-indigo-950/40 border border-indigo-500/40 rounded-xl text-indigo-200 text-sm leading-relaxed font-serif">
-            <span className="font-bold text-indigo-400 block mb-1 text-xs uppercase tracking-wider">[요약문 Box]</span>
-            {selectedPassage.summarySentence}
-          </div>
-        )}
-
-        <div className="p-5 bg-slate-950 rounded-xl border border-slate-800 text-slate-200 leading-relaxed text-base font-sans selection:bg-blue-500 selection:text-white whitespace-pre-wrap">
+        {/* English Passage Text */}
+        <div className="bg-slate-950 p-5 rounded-xl border border-slate-850 font-serif text-slate-100 text-base leading-relaxed tracking-wide select-text">
           {selectedPassage.passage}
         </div>
-      </div>
 
-      {/* Original EBS Questions & Interactive Choices */}
-      <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-5">
-        <div className="flex items-center justify-between">
+        {/* Question & Options Header */}
+        <div className="pt-2">
           <h4 className="text-sm font-bold text-slate-300 flex items-center space-x-2">
-            <i className="fa-solid fa-circle-question text-blue-500"></i>
-            <span>[EBS 원문 선택지 및 정답 - {selectedPassage.type}]</span>
+            <span className="px-2.5 py-0.5 bg-blue-950 text-blue-400 border border-blue-800/60 rounded text-xs">
+              {selectedPassage.type}
+            </span>
+            <span>다음 글의 빈칸에 들어갈 말로 가장 적절한 것을 고르시오.</span>
           </h4>
-          {isAnswered && (
-            <button
-              onClick={() => setSelectedOption(null)}
-              className="text-xs text-slate-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 transition-all flex items-center space-x-1.5"
-            >
-              <i className="fa-solid fa-rotate-left"></i>
-              <span>다시 풀기</span>
-            </button>
-          )}
         </div>
 
+        {/* Options List */}
         <div className="space-y-2.5">
           {selectedPassage.options.map((opt, idx) => {
             const isAnswerOption = idx === selectedPassage.answerIndex;
-            const isUserChosen = selectedOption === idx;
+            const isUserChosen = idx === selectedOption;
 
-            let optionStyle = 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-blue-500/50 hover:bg-slate-950';
+            let optionStyle =
+              'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-800/50 text-slate-300';
+
             if (isAnswered) {
               if (isAnswerOption) {
-                optionStyle = 'bg-emerald-950/70 border-emerald-500 text-emerald-200 font-bold shadow-lg shadow-emerald-950/50';
+                optionStyle = 'border-emerald-500/80 bg-emerald-950/40 text-emerald-200 font-semibold';
               } else if (isUserChosen) {
-                optionStyle = 'bg-rose-950/70 border-rose-500 text-rose-200 font-bold';
+                optionStyle = 'border-rose-500/80 bg-rose-950/40 text-rose-200 line-through opacity-80';
               } else {
-                optionStyle = 'bg-slate-950/30 border-slate-900 text-slate-500 opacity-60';
+                optionStyle = 'border-slate-800/40 bg-slate-950/30 text-slate-500 opacity-60';
               }
             }
 
             return (
               <div
                 key={idx}
-                onClick={() => setSelectedOption(idx)}
-                className={`p-4 rounded-xl border text-sm flex items-center justify-between cursor-pointer transition-all duration-200 ${optionStyle}`}
+                onClick={() => !isAnswered && setSelectedOption(idx)}
+                className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer flex items-center justify-between group ${optionStyle}`}
               >
-                <span className="flex items-center space-x-3.5">
-                  <span
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      isAnswered && isAnswerOption
-                        ? 'bg-emerald-500 text-slate-950 font-black'
-                        : isAnswered && isUserChosen
-                        ? 'bg-rose-500 text-white font-black'
-                        : 'bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    {idx + 1}
-                  </span>
-                  <span className="leading-snug">{opt}</span>
-                </span>
-                
+                <span className="text-sm leading-relaxed">{opt}</span>
+
                 {isAnswered && (
-                  <div>
+                  <div className="shrink-0 ml-3">
                     {isAnswerOption && (
                       <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-md border border-emerald-500/30 flex items-center space-x-1">
                         <i className="fa-solid fa-check text-emerald-400"></i>
@@ -242,8 +224,74 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
             </div>
           </div>
         )}
+
+        {/* Student Reflection & Feedback Card (Positioned at bottom) */}
+        <div className="mt-8 border-t border-purple-500/30 pt-6">
+          <div className="bg-gradient-to-br from-purple-950/40 via-slate-900 to-indigo-950/40 p-6 rounded-2xl border border-purple-500/40 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 text-lg">
+                  <i className="fa-solid fa-pen-to-square"></i>
+                </div>
+                <div>
+                  <h4 className="text-sm font-extrabold text-white flex items-center space-x-2">
+                    <span>✍️ 문항에 대한 생각 및 메타인지 소감 작성</span>
+                    <span className="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/40">
+                      생기부 세특 반영
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    문항을 풀고 난 느낌, 구문 분석 소감, 오답 이유 등을 작성해 보세요. 관리자 대시보드 및 세특 생성기에 자동 저장됩니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {isSavedReflection ? (
+              <div className="bg-emerald-950/60 p-4 rounded-xl border border-emerald-500/40 text-emerald-300 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <i className="fa-solid fa-circle-check text-xl text-emerald-400"></i>
+                  <div>
+                    <h5 className="text-xs font-bold">소감이 성공적으로 작성되어 관리자 대시보드에 전달되었습니다!</h5>
+                    <p className="text-[11px] opacity-90 mt-0.5 italic font-serif">"{reflectionInput}"</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsSavedReflection(false)}
+                  className="px-3 py-1 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 text-xs rounded-lg border border-emerald-700/50"
+                >
+                  수정하기
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <textarea
+                  rows={3}
+                  value={reflectionInput}
+                  onChange={(e) => setReflectionInput(e.target.value)}
+                  placeholder={`예: [${selectedPassage.lesson} ${selectedPassage.itemNo}] 문항을 풀면서 가주어-진주어 구문 파악이 조금 까다로웠지만, 소크라테스 튜터를 통해 주제 문장의 역접 구조를 명확히 이해했습니다.`}
+                  className="w-full bg-slate-950 p-3.5 rounded-xl border border-purple-900/40 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors leading-relaxed"
+                />
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">
+                    작성자: {auth.currentUser?.displayName || auth.currentUser?.email || '학습자'}
+                  </span>
+
+                  <button
+                    onClick={handleSaveReflection}
+                    disabled={!reflectionInput.trim()}
+                    className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-900/40 transition-all flex items-center space-x-2 disabled:opacity-40 shrink-0"
+                  >
+                    <i className="fa-solid fa-paper-plane"></i>
+                    <span>소감 제출 & 세특 저장</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
-

@@ -34,6 +34,18 @@ export interface SocraticSummary {
   metacognitiveStatus: '우수 (구문 파악 성공)' | '보통 (힌트 유도 필요)' | '집중 필요 (어휘 보강)';
 }
 
+export interface StudentReflection {
+  id: string;
+  studentEmail: string;
+  studentName: string;
+  passageId: string;
+  lesson: string;
+  itemNo: string;
+  passageTitle: string;
+  reflectionText: string;
+  timestamp: string;
+}
+
 export interface AnalyticsMetrics {
   totalStudents: number;
   totalLogins: number;
@@ -44,6 +56,7 @@ export interface AnalyticsMetrics {
 
 const STORAGE_KEY_STUDENTS = 'csat_analytics_students_v1';
 const STORAGE_KEY_SOCRATIC = 'csat_analytics_socratic_v1';
+const STORAGE_KEY_REFLECTIONS = 'csat_analytics_reflections_v1';
 
 /**
  * Get stored student activities from localStorage (or Firestore fallback)
@@ -262,6 +275,102 @@ export function clearAnalyticsData(): void {
     localStorage.removeItem(STORAGE_KEY_STUDENTS);
     localStorage.removeItem(STORAGE_KEY_SOCRATIC);
   } catch (e) {}
+}
+
+/**
+ * Record Student Passage Reflection in Firestore & LocalStorage
+ */
+export function recordStudentReflection(data: {
+  studentEmail?: string | null;
+  studentName?: string | null;
+  passageId: string;
+  lesson: string;
+  itemNo: string;
+  passageTitle: string;
+  reflectionText: string;
+}): StudentReflection {
+  const email = data.studentEmail || 'student@simin.hs.kr';
+  const name = data.studentName || email.split('@')[0];
+  const nowStr = new Date().toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const reflections = getStoredStudentReflections();
+  const newReflection: StudentReflection = {
+    id: `ref-${Date.now()}`,
+    studentEmail: email,
+    studentName: name,
+    passageId: data.passageId,
+    lesson: data.lesson,
+    itemNo: data.itemNo,
+    passageTitle: data.passageTitle,
+    reflectionText: data.reflectionText.trim(),
+    timestamp: nowStr,
+  };
+
+  reflections.unshift(newReflection);
+
+  try {
+    localStorage.setItem(STORAGE_KEY_REFLECTIONS, JSON.stringify(reflections));
+  } catch (e) {}
+
+  // Firestore DB save
+  try {
+    setDoc(doc(db, 'student_reflections', newReflection.id), newReflection).catch(() => {});
+  } catch (e) {}
+
+  // Update student completed passages count
+  if (data.studentEmail) {
+    const students = getStoredStudentActivities();
+    const idx = students.findIndex((s) => s.email.toLowerCase() === data.studentEmail?.toLowerCase());
+    if (idx >= 0) {
+      students[idx].completedPassagesCount += 1;
+      students[idx].totalDwellTimeMinutes += 3;
+      try {
+        localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+        const docId = data.studentEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+        setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
+      } catch (e) {}
+    }
+  }
+
+  return newReflection;
+}
+
+/**
+ * Get stored student reflections from LocalStorage
+ */
+export function getStoredStudentReflections(): StudentReflection[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_REFLECTIONS);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Async fetch student reflections from Firebase Firestore with LocalStorage fallback
+ */
+export async function fetchFirestoreStudentReflections(): Promise<StudentReflection[]> {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'student_reflections'));
+    if (querySnapshot.empty) {
+      return getStoredStudentReflections();
+    }
+    const list: StudentReflection[] = [];
+    querySnapshot.forEach((docSnap) => {
+      list.push(docSnap.data() as StudentReflection);
+    });
+    return list;
+  } catch (e) {
+    return getStoredStudentReflections();
+  }
 }
 
 /**

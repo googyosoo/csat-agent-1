@@ -4,8 +4,10 @@ import { isAdminUser, ADMIN_EMAILS } from '../lib/adminAuth';
 import {
   StudentActivity,
   SocraticSummary,
+  StudentReflection,
   fetchFirestoreStudentActivities,
   fetchFirestoreSocraticSummaries,
+  fetchFirestoreStudentReflections,
   calculateAnalyticsMetrics,
   clearAnalyticsData,
 } from '../lib/analytics';
@@ -27,6 +29,7 @@ interface StudentReportResult {
 export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }) => {
   const [students, setStudents] = useState<StudentActivity[]>([]);
   const [socSummaries, setSocSummaries] = useState<SocraticSummary[]>([]);
+  const [reflections, setReflections] = useState<StudentReflection[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<StudentActivity | null>(null);
 
@@ -39,8 +42,10 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
   const loadData = async () => {
     const sList = await fetchFirestoreStudentActivities();
     const socList = await fetchFirestoreSocraticSummaries();
+    const refList = await fetchFirestoreStudentReflections();
     setStudents(sList);
     setSocSummaries(socList);
+    setReflections(refList);
   };
 
   useEffect(() => {
@@ -308,6 +313,63 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* Real-time Student Reflections Section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center text-sm">
+              <i className="fa-solid fa-pen-fancy"></i>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                <span>📝 학생 문항 학습 소감 & 메타인지 성찰 기록</span>
+                <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-mono">
+                  총 {reflections.length}건 수집됨
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                지문 분석 워크북에서 학생이 직접 작성한 오답 원인, 구문 이해 소감 및 학업 탐구 태도 실시간 기록입니다.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {reflections.length === 0 ? (
+          <div className="py-8 text-center text-slate-500 text-xs">
+            <i className="fa-solid fa-note-sticky text-3xl mb-2 text-slate-700"></i>
+            <p>아직 제출된 학생 문항 소감이 없습니다. 학생이 워크북에서 소감을 제출하면 여기에 표시됩니다.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[380px] overflow-y-auto">
+            {reflections.map((ref) => (
+              <div key={ref.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-xs border-b border-slate-800/80 pb-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-slate-200">{ref.studentName}</span>
+                    <span className="text-[11px] text-slate-400 font-mono">({ref.studentEmail})</span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-purple-950 text-purple-300 border border-purple-800/60 rounded text-[10px] font-mono">
+                    {ref.lesson} {ref.itemNo}
+                  </span>
+                </div>
+
+                <div className="text-xs text-slate-400 font-medium">
+                  📌 <span className="text-slate-300 font-bold">{ref.passageTitle}</span>
+                </div>
+
+                <p className="text-xs text-purple-100 bg-purple-950/30 p-2.5 rounded-lg border border-purple-900/40 font-serif leading-relaxed italic">
+                  "{ref.reflectionText}"
+                </p>
+
+                <div className="text-[10px] text-slate-500 text-right font-mono">
+                  {ref.timestamp}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
