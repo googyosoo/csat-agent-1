@@ -214,7 +214,18 @@ app.post('/api/gemini/transform', async (req, res) => {
       config: { responseMimeType: 'application/json' },
     });
     const json = JSON.parse(cleanJsonString(response.text || '{}'));
-    res.json({ success: true, data: json });
+
+    const formattedData = {
+      ...json,
+      type: json.type || targetQuestionType || '변형 문항',
+      modifiedPassage: json.modifiedPassage || json.passage || passage || '',
+      question: json.question || `[${lesson || 'EBS'} ${itemNo || '지문'}] 다음 글의 ${targetQuestionType} 문제로 가장 적절한 것은?`,
+      options: json.options && json.options.length > 0 ? json.options : ['① option 1', '② option 2', '③ option 3', '④ option 4', '⑤ option 5'],
+      correctIndex: typeof json.correctIndex === 'number' ? json.correctIndex : (parseInt(json.answer || '1', 10) - 1 || 0),
+      rationale: json.rationale || json.explanation || '지문의 정밀 구문 및 흐름상 정답이 도출됩니다.',
+    };
+
+    res.json({ success: true, data: formattedData });
   } catch {
     const fallbackData = {
       type: targetQuestionType,

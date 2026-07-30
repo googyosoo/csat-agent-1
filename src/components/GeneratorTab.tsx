@@ -119,7 +119,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
               <div className="flex items-center space-x-2">
                 <span className="text-xs font-bold text-amber-300 bg-amber-500/20 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center space-x-1">
                   <i className="fa-solid fa-list-check text-[10px]"></i>
-                  <span>유형: {generatedItem.type}</span>
+                  <span>유형: {generatedItem.type || targetQuestionType}</span>
                 </span>
                 <span className="text-xs font-bold text-purple-300 bg-purple-500/20 px-3 py-1 rounded-lg border border-purple-500/30">
                   {generatedItem.difficulty || difficulty}
@@ -171,16 +171,14 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
             <div className="p-5 bg-slate-900 rounded-xl border border-amber-500/30 text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap shadow-inner">
               <div className="text-[10px] font-bold text-amber-400/90 uppercase tracking-wider mb-2 pb-1 border-b border-slate-800 flex items-center space-x-1">
                 <i className="fa-solid fa-pen-ruler"></i>
-                <span>[{generatedItem.type}] 변형 적용 지문</span>
+                <span>[{generatedItem.type || targetQuestionType}] 변형 적용 지문</span>
               </div>
               <div
                 dangerouslySetInnerHTML={{
-                  __html: generatedItem.modifiedPassage
-                    ? generatedItem.modifiedPassage
-                        .replace(/<u>/g, '<u class="text-amber-300 font-bold underline decoration-amber-400 decoration-2 underline-offset-4">')
-                        .replace(/\[ 주어진 문장 \]/g, '<div class="p-3 my-2 bg-amber-950/40 border border-amber-500/40 rounded-lg text-amber-200 font-semibold">[ 주어진 문장 ]</div>')
-                        .replace(/\[ 요약문 \]/g, '<div class="p-3 my-2 bg-purple-950/40 border border-purple-500/40 rounded-lg text-purple-200 font-semibold">[ 요약문 ]</div>')
-                    : ''
+                  __html: (generatedItem.modifiedPassage || (generatedItem as any).passage || selectedPassage.passage || '')
+                    .replace(/<u>/g, '<u class="text-amber-300 font-bold underline decoration-amber-400 decoration-2 underline-offset-4">')
+                    .replace(/\[ 주어진 문장 \]/g, '<div class="p-3 my-2 bg-amber-950/40 border border-amber-500/40 rounded-lg text-amber-200 font-semibold">[ 주어진 문장 ]</div>')
+                    .replace(/\[ 요약문 \]/g, '<div class="p-3 my-2 bg-purple-950/40 border border-purple-500/40 rounded-lg text-purple-200 font-semibold">[ 요약문 ]</div>')
                 }}
               />
             </div>
