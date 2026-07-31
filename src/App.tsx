@@ -62,7 +62,7 @@ export default function App() {
       setIsSpeaking(true);
       window.speechSynthesis.speak(utterance);
     } else {
-      alert('이 브라우저는 음성 합성을 지원하지 않습니다.');
+      console.warn('Speech synthesis not supported in this browser.');
     }
   };
 

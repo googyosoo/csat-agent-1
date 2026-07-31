@@ -14,16 +14,19 @@ export const IngestModal: React.FC<IngestModalProps> = ({ onClose, onAddPassage,
   const [passageText, setPassageText] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const handleIngest = async () => {
     if (!passageText.trim() || isIngesting) return;
     setIsIngesting(true);
+    setErrorMessage(null);
 
     try {
       const resData = await safeFetchJson('/api/gemini/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          passageText,
+          rawText: passageText,
           lesson,
           itemNo,
           customApiKey,
@@ -40,13 +43,12 @@ export const IngestModal: React.FC<IngestModalProps> = ({ onClose, onAddPassage,
         };
 
         onAddPassage(newItem);
-        alert(`새 지문 [${lesson} ${itemNo}] 분석 및 탑재가 완료되었습니다!`);
         onClose();
       } else {
         throw new Error(resData.error || '지문 자동 파싱 실패');
       }
     } catch (err: any) {
-      alert(`지문 자동 등록 오류: ${err.message}`);
+      setErrorMessage(`지문 자동 등록 오류: ${err.message}`);
     } finally {
       setIsIngesting(false);
     }
@@ -58,12 +60,22 @@ export const IngestModal: React.FC<IngestModalProps> = ({ onClose, onAddPassage,
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <h3 className="text-sm font-bold text-white flex items-center space-x-2">
             <i className="fa-solid fa-file-import text-blue-400"></i>
-            <span>새 EBS 영어 지문 AI 자동 분석 & 등록</span>
+            <span>2027 EBS 신규 지문 AI 자동 분석 & 등록</span>
           </h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-xs transition-all"
+          >
             <i className="fa-solid fa-xmark"></i>
           </button>
         </div>
+
+        {errorMessage && (
+          <div className="p-3 bg-rose-950/80 border border-rose-500/50 rounded-xl text-rose-300 text-xs flex items-center space-x-2">
+            <i className="fa-solid fa-triangle-exclamation text-rose-400 shrink-0"></i>
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>

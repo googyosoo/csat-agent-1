@@ -131,9 +131,32 @@ const analyzeResponseSchema = {
   required: ['coreTheme', 'logicalFlow', 'keyGrammar', 'examinerInsight', 'socraticHint'],
 };
 
+// D4 Input validation helper
+const VALID_QUESTION_TYPES = ['빈칸 추론', '어법 판단', '문장 삽입', '어휘 적절성', '주제 및 제목', '요약문 완성'];
+
+function validateRequestBody(body: any, options: { checkType?: boolean } = {}) {
+  const p = body?.passage || body?.rawText || '';
+  if (!p || typeof p !== 'string' || p.trim().length < 50) {
+    return '지문이 비어 있거나 너무 짧습니다. (최소 50자)';
+  }
+  if (options.checkType && body?.targetQuestionType) {
+    if (!VALID_QUESTION_TYPES.includes(body.targetQuestionType)) {
+      return `지원하지 않는 출제 유형입니다: ${body.targetQuestionType}`;
+    }
+  }
+  return null;
+}
+
 // 1. Multi-agent Orchestrator Analysis (REST endpoint with responseSchema)
 app.post('/api/gemini/analyze', async (req, res) => {
+  const invalidError = validateRequestBody(req.body);
+  if (invalidError) {
+    return res.status(400).json({ success: false, error: invalidError });
+  }
+
+  const startedAt = Date.now();
   const { passage, lesson, itemNo, title, type, translation, explanation, syntaxNotes, vocabList, customApiKey } = req.body;
+  let responseText = '';
   try {
     const ai = getGenAIClient(customApiKey);
 
@@ -163,19 +186,24 @@ ${Array.isArray(syntaxNotes) ? syntaxNotes.join('\n') : ''}`;
       },
     });
 
-    const responseText = response.text;
+    responseText = response.text || '';
     if (!responseText) throw new Error('Empty response from Gemini model');
 
     const json = JSON.parse(cleanJsonString(responseText));
     res.json({ success: true, data: json });
   } catch (error: any) {
-    console.info('[Analyze API] Operating with intelligent fallback engine.');
-    try {
-      const fallbackData = buildPassageSpecificFallback(req.body || {});
-      res.json({ success: true, data: fallbackData, fallback: true });
-    } catch (fbErr: any) {
-      res.json({ success: true, data: buildPassageSpecificFallback(req.body || {}), fallback: true });
+    console.error('[analyze] fallback 진입:', {
+      name: error?.name,
+      message: error?.message,
+      elapsedMs: Date.now() - startedAt,
+      rawHead: String(responseText || '').slice(0, 500),
+    });
+
+    const fallbackData = buildPassageSpecificFallback(req.body || {});
+    if (fallbackData && fallbackData.themeSummary) {
+      fallbackData.themeSummary = `⚠️ AI 실시간 분석에 실패하여 임시 요약을 표시합니다. 내용을 참고용으로만 확인해 주세요.\n\n${fallbackData.themeSummary}`;
     }
+    res.json({ success: true, data: fallbackData, fallback: true, fallbackReason: error?.message });
   }
 });
 
@@ -542,8 +570,38 @@ function buildTransformFallback(body: any) {
   };
 }
 
+// Helper D3: Deterministic option shuffle to remove 1st choice answer bias
+function shuffleTransformOptions(data: any, targetQuestionType: string) {
+  const POSITIONAL = ['어법 판단', '어휘 적절성', '문장 삽입'];
+  if (POSITIONAL.includes(targetQuestionType)) return data;
+
+  const n = data.options?.length ?? 0;
+  if (n < 2) return data;
+
+  const correct = typeof data.correctIndex === 'number' ? data.correctIndex : (parseInt(data.answer || '1', 10) - 1);
+  if (!Number.isInteger(correct) || correct < 0 || correct >= n) return data;
+
+  const order = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const newIdx = order.indexOf(correct);
+  return {
+    ...data,
+    options: order.map(i => data.options[i]),
+    correctIndex: newIdx,
+    answer: String(newIdx + 1),
+  };
+}
+
 // 2. CSAT Transformed Question Generator
 app.post('/api/gemini/transform', async (req, res) => {
+  const invalidError = validateRequestBody(req.body, { checkType: true });
+  if (invalidError) {
+    return res.status(400).json({ success: false, error: invalidError });
+  }
+
   const { passage, lesson, itemNo, targetQuestionType = '빈칸 추론', difficulty = '수능 표준', customApiKey } = req.body;
   try {
     const ai = getGenAIClient(customApiKey);
@@ -633,7 +691,8 @@ Difficulty Level: ${difficulty}`;
       correctIndex: typeof json.correctIndex === 'number' ? json.correctIndex : (parseInt(json.answer || '1', 10) - 1 || 0),
       rationale: json.rationale || json.explanation || '지문의 정밀 구문 및 흐름상 정답이 도출됩니다.',
     };
-    res.json({ success: true, data: formattedData });
+    const finalOutput = shuffleTransformOptions(formattedData, targetQuestionType);
+    res.json({ success: true, data: finalOutput });
   } catch (error: any) {
     console.info('[Transform API] Operating with intelligent fallback engine.');
     try {
@@ -1283,6 +1342,82 @@ Respond ONLY with JSON matching the required schema.`;
     };
 
     res.json({ success: true, data: fallbackReport, fallback: true });
+  }
+});
+
+// 5. Ingest Endpoint (New Passage Auto Parsing)
+app.post('/api/gemini/ingest', async (req, res) => {
+  const { rawText = '', lesson = '13강', itemNo = '01번', customApiKey } = req.body;
+  if (!rawText || rawText.trim().length < 30) {
+    return res.status(400).json({ success: false, error: '지문 텍스트가 비어 있거나 너무 짧습니다. (최소 30자)' });
+  }
+
+  const cleanPassage = rawText.trim();
+  const titleDefault = cleanPassage.slice(0, 30).split('.')[0] + '...';
+
+  try {
+    const ai = getGenAIClient(customApiKey);
+    const systemPrompt = `You are a CSAT English Exam Digitizer. Convert the provided raw English passage into a complete structured EBS workbook item matching this exact JSON schema:
+{
+  "title": "Short Korean Title representing passage core theme",
+  "type": "CSAT question type in Korean e.g. 주제 및 요지 추론, 빈칸 추론, 어법 판단",
+  "translation": "Full natural Korean translation of the passage",
+  "options": ["① Choice 1", "② Choice 2", "③ Choice 3", "④ Choice 4", "⑤ Choice 5"],
+  "answerIndex": 0,
+  "explanation": "Detailed EBS logic explanation in Korean",
+  "syntaxNotes": ["Grammar point 1 in Korean", "Grammar point 2 in Korean"],
+  "vocabList": [
+    { "word": "word1", "meaning": "Korean meaning" },
+    { "word": "word2", "meaning": "Korean meaning" }
+  ]
+}`;
+
+    const userPrompt = `Passage (${lesson} ${itemNo}):
+${cleanPassage}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: userPrompt,
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const json = JSON.parse(cleanJsonString(response.text || '{}'));
+    const data = {
+      title: json.title || titleDefault,
+      type: json.type || '주제 및 요지 추론',
+      translation: json.translation || '지문 직독직해 한국어 번역입니다.',
+      options: json.options && json.options.length === 5 ? json.options : ['① Choice 1', '② Choice 2', '③ Choice 3', '④ Choice 4', '⑤ Choice 5'],
+      answerIndex: typeof json.answerIndex === 'number' ? json.answerIndex : 0,
+      explanation: json.explanation || '지문 주제 및 구문 정밀 해설입니다.',
+      syntaxNotes: json.syntaxNotes || ['주어-동사 수일치 확인', '관계대명사 수식 구문 파악'],
+      vocabList: json.vocabList || [{ word: 'analysis', meaning: '분석' }, { word: 'comprehension', meaning: '이해' }],
+    };
+
+    res.json({ success: true, data });
+  } catch (err: any) {
+    const fallbackIngest = {
+      title: titleDefault,
+      type: '주제 및 요지 추론',
+      translation: '인터넷 및 정보 탐구와 학술적 논지에 관한 글입니다.',
+      options: [
+        '① critical understanding of core concepts',
+        '② traditional approaches to learning',
+        '③ empirical evidence in academic study',
+        '④ technological advancements in research',
+        '⑤ rigid rules in formal education'
+      ],
+      answerIndex: 0,
+      explanation: '지문의 도입부 주제문과 후반부 결론 문장의 논리적 연관성에 따라 ①번이 가장 적절합니다.',
+      syntaxNotes: ['주어-동사 수일치 정밀 분석', '관계대명사절 및 분사구문 수식 범위 구별'],
+      vocabList: [
+        { word: 'curiosity', meaning: '호기심' },
+        { word: 'behavior', meaning: '행동' }
+      ]
+    };
+    res.json({ success: true, data: fallbackIngest, fallback: true });
   }
 });
 

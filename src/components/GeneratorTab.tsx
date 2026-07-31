@@ -18,8 +18,12 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showOriginalPassage, setShowOriginalPassage] = useState(true);
 
+  const [generatorError, setGeneratorError] = useState<string | null>(null);
+
   const generateQuestion = async () => {
+    if (isGenerating) return;
     setIsGenerating(true);
+    setGeneratorError(null);
     setGeneratedItem(null);
     setUserChoice(null);
     setShowAnalysis(false);
@@ -45,7 +49,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
         throw new Error(data.error || '변형 문항 생성 실패');
       }
     } catch (err: any) {
-      alert(`변형 문제 생성 오류: ${err.message}`);
+      setGeneratorError(`변형 문제 생성 오류: ${err.message}`);
     } finally {
       setIsGenerating(false);
     }

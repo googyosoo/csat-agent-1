@@ -100,8 +100,30 @@ ${rawTranslation.slice(0, 160)}...
 질문하신 내용이 필자의 핵심 주장 및 결론과 어떻게 유기적으로 연결되는지, 본인이 생각하는 문맥상 의미를 한 문장으로 설명해 보시겠어요?`;
 }
 
+// D4 Input validation helper
+const VALID_QUESTION_TYPES = ['빈칸 추론', '어법 판단', '문장 삽입', '어휘 적절성', '주제 및 제목', '요약문 완성'];
+
+function validateRequestBody(body: any, options: { checkType?: boolean } = {}) {
+  const p = body?.passage || body?.rawText || '';
+  if (!p || typeof p !== 'string' || p.trim().length < 50) {
+    return '지문이 비어 있거나 너무 짧습니다. (최소 50자)';
+  }
+  if (options.checkType && body?.targetQuestionType) {
+    if (!VALID_QUESTION_TYPES.includes(body.targetQuestionType)) {
+      return `지원하지 않는 출제 유형입니다: ${body.targetQuestionType}`;
+    }
+  }
+  return null;
+}
+
 // 1. Analyze Endpoint (Fast Non-Streaming)
 app.post('/api/gemini/analyze', async (req, res) => {
+  const invalidError = validateRequestBody(req.body);
+  if (invalidError) {
+    return res.status(400).json({ success: false, error: invalidError });
+  }
+
+  const startedAt = Date.now();
   const { passage = '', lesson = '', itemNo = '', title = '', type = '', translation = '', explanation = '', customApiKey } = req.body;
   
   const displayLesson = lesson || 'EBS';
@@ -109,41 +131,76 @@ app.post('/api/gemini/analyze', async (req, res) => {
   const displayTitle = title || '선택 지문';
   const displayType = type || '주제 및 요지 추론';
 
+  // Extract actual words from passage for fallback
+  const passageWords = (passage || '').match(/[a-zA-Z]{5,}/g) || [];
+  const uniquePassageWords = Array.from(new Set(passageWords.map(w => w.toLowerCase()))).slice(0, 3);
+  const fallbackVocab = uniquePassageWords.map(w => ({ word: w, meaning: '지문 수능 핵심 어휘' }));
+
   const defaultAnalysisData = {
-    themeSummary: `[${displayLesson} ${displayItemNo}] "${displayTitle}" 지문은 학술적 핵심 주제와 논리적 전개를 다루는 수능 연계 주요 지문입니다. 도입부에서 전제를 제시한 후, 후반부 결론을 통해 핵심 제언을 강조하고 있습니다.`,
-    examinerNotes: `수능 출제 포인트: [${displayType}] 유형으로 변형 출제 가능성이 매우 높으며, 지문의 주제문 패러프레이징 및 함정 선택지 구성이 핵심 출제 요소입니다.`,
+    themeSummary: `[${displayLesson} ${displayItemNo}] "${displayTitle}" 지문의 핵심 요지 및 논리 구조 요약입니다.`,
+    examinerNotes: `수능 출제 포인트: [${displayType}] 유형 변형 문제 출제 가능성이 매우 높습니다.`,
     socraticPrompts: [
       `지문 도입부 문장에서 필자가 강조하는 핵심 주제어 도출하기`,
       `후반부 결론 문장과의 논리적 결속성 및 대조 연결어 역할 분석하기`,
-      `핵심 어휘의 문맥상 함축적 어조(긍정/비판) 구별하기`
+      `핵심 어휘의 문맥상 함축적 어조 구별하기`
     ],
     syntaxBreakdown: [
-      `주어-동사 수일치: 관계사절 및 분사구문 수식어구에 따른 본동사 수일치 확인`,
+      `주어-동사 수일치: 복잡한 수식어구에 따른 본동사 수일치 확인`,
       `연결어 구문: However, Therefore 등의 역접/결론 연결어를 통한 글의 흐름 전환 파악`
     ],
-    vocabulary: [
-      { word: 'fundamental', meaning: '근본적인, 핵심의' },
-      { word: 'perspective', meaning: '관점, 시각' },
-      { word: 'deliberation', meaning: '숙의, 토론' }
-    ]
+    vocabulary: fallbackVocab.length > 0 ? fallbackVocab : [{ word: 'process', meaning: '과정, 절차' }, { word: 'attainment', meaning: '성취, 달성' }]
   };
 
+  let rawModelOutput = '';
   try {
     const ai = getGenAIClient(customApiKey);
-    const prompt = `Analyze EBS CSAT English passage in Korean:
-Passage (${displayLesson} ${displayItemNo}: ${displayTitle}):
+    const systemInstruction = `You are an expert AI English Exam Analyzer for Korean High School Students. Analyze the provided EBS CSAT English passage and return JSON matching this exact structure:
+{
+  "themeSummary": "Comprehensive summary of main idea and thesis in Korean (2-3 sentences)",
+  "examinerNotes": "CSAT Examiner analysis on question modification potential and traps in Korean",
+  "socraticPrompts": ["Socratic prompt 1 in Korean", "Socratic prompt 2 in Korean", "Socratic prompt 3 in Korean"],
+  "syntaxBreakdown": ["Syntax point 1 in Korean", "Syntax point 2 in Korean"],
+  "vocabulary": [
+    {"word": "actual_word_from_passage_1", "meaning": "Korean meaning"},
+    {"word": "actual_word_from_passage_2", "meaning": "Korean meaning"}
+  ]
+}
+MANDATE: The vocabulary array MUST contain words that ACTUALLY appear in the provided English passage text!`;
+
+    const userPrompt = `Passage (${displayLesson} ${displayItemNo}: ${displayTitle}):
 ${passage}
 Translation: ${translation}
 Explanation: ${explanation}`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.6-flash',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json',
+        temperature: 0.2,
+      },
     });
-    const json = JSON.parse(cleanJsonString(response.text || '{}'));
+
+    rawModelOutput = response.text || '';
+    const json = JSON.parse(cleanJsonString(rawModelOutput));
     res.json({ success: true, data: { ...defaultAnalysisData, ...json } });
-  } catch {
-    res.json({ success: true, data: defaultAnalysisData, fallback: true });
+  } catch (err: any) {
+    // D1: Log fallback entry reason
+    console.error('[analyze] fallback 진입:', {
+      name: err?.name,
+      message: err?.message,
+      elapsedMs: Date.now() - startedAt,
+      rawHead: String(rawModelOutput || '').slice(0, 500),
+    });
+
+    // D2: Clearly indicate fallback status to user/teacher
+    const fallbackData = {
+      ...defaultAnalysisData,
+      themeSummary: `⚠️ AI 실시간 분석에 실패하여 임시 요약을 표시합니다. 내용을 참고용으로만 확인해 주세요.\n\n${defaultAnalysisData.themeSummary}`,
+    };
+
+    res.json({ success: true, data: fallbackData, fallback: true, fallbackReason: err?.message });
   }
 });
 
@@ -203,8 +260,38 @@ ${translation || '인터넷은 정보가 국경을 넘어 자유롭게 흐르도
   }
 });
 
+// Helper D3: Deterministic option shuffle to remove 1st choice answer bias
+function shuffleTransformOptions(data: any, targetQuestionType: string) {
+  const POSITIONAL = ['어법 판단', '어휘 적절성', '문장 삽입'];
+  if (POSITIONAL.includes(targetQuestionType)) return data;
+
+  const n = data.options?.length ?? 0;
+  if (n < 2) return data;
+
+  const correct = typeof data.correctIndex === 'number' ? data.correctIndex : (parseInt(data.answer || '1', 10) - 1);
+  if (!Number.isInteger(correct) || correct < 0 || correct >= n) return data;
+
+  const order = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const newIdx = order.indexOf(correct);
+  return {
+    ...data,
+    options: order.map(i => data.options[i]),
+    correctIndex: newIdx,
+    answer: String(newIdx + 1),
+  };
+}
+
 // 3. Transform Endpoint
 app.post('/api/gemini/transform', async (req, res) => {
+  const invalidError = validateRequestBody(req.body, { checkType: true });
+  if (invalidError) {
+    return res.status(400).json({ success: false, error: invalidError });
+  }
+
   const { passage = '', lesson = '', itemNo = '', targetQuestionType = '빈칸 추론', difficulty = '수능 표준', customApiKey } = req.body;
   try {
     const ai = getGenAIClient(customApiKey);
@@ -225,7 +312,8 @@ app.post('/api/gemini/transform', async (req, res) => {
       rationale: json.rationale || json.explanation || '지문의 정밀 구문 및 흐름상 정답이 도출됩니다.',
     };
 
-    res.json({ success: true, data: formattedData });
+    const finalOutput = shuffleTransformOptions(formattedData, targetQuestionType);
+    res.json({ success: true, data: finalOutput });
   } catch {
     const fallbackData = {
       type: targetQuestionType,
@@ -242,7 +330,8 @@ app.post('/api/gemini/transform', async (req, res) => {
       correctIndex: 0,
       rationale: '지문 전체의 논지 흐름상 주제와 직결되는 ①번이 가장 적절합니다.',
     };
-    res.json({ success: true, data: fallbackData, fallback: true });
+    const finalFallback = shuffleTransformOptions(fallbackData, targetQuestionType);
+    res.json({ success: true, data: finalFallback, fallback: true });
   }
 });
 
@@ -263,6 +352,82 @@ app.post('/api/gemini/student-report', async (req, res) => {
       keyCompetencies: ['주도적 메타인지 탐구', '논리적 지문 구조 분석', '수능 변형 문제 응용력'],
     },
   });
+});
+
+// 5. Ingest Endpoint (New Passage Auto Parsing)
+app.post('/api/gemini/ingest', async (req, res) => {
+  const { rawText = '', lesson = '13강', itemNo = '01번', customApiKey } = req.body;
+  if (!rawText || rawText.trim().length < 30) {
+    return res.status(400).json({ success: false, error: '지문 텍스트가 비어 있거나 너무 짧습니다. (최소 30자)' });
+  }
+
+  const cleanPassage = rawText.trim();
+  const titleDefault = cleanPassage.slice(0, 30).split('.')[0] + '...';
+
+  try {
+    const ai = getGenAIClient(customApiKey);
+    const systemPrompt = `You are a CSAT English Exam Digitizer. Convert the provided raw English passage into a complete structured EBS workbook item matching this exact JSON schema:
+{
+  "title": "Short Korean Title representing passage core theme",
+  "type": "CSAT question type in Korean e.g. 주제 및 요지 추론, 빈칸 추론, 어법 판단",
+  "translation": "Full natural Korean translation of the passage",
+  "options": ["① Choice 1", "② Choice 2", "③ Choice 3", "④ Choice 4", "⑤ Choice 5"],
+  "answerIndex": 0,
+  "explanation": "Detailed EBS logic explanation in Korean",
+  "syntaxNotes": ["Grammar point 1 in Korean", "Grammar point 2 in Korean"],
+  "vocabList": [
+    { "word": "word1", "meaning": "Korean meaning" },
+    { "word": "word2", "meaning": "Korean meaning" }
+  ]
+}`;
+
+    const userPrompt = `Passage (${lesson} ${itemNo}):
+${cleanPassage}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const json = JSON.parse(cleanJsonString(response.text || '{}'));
+    const data = {
+      title: json.title || titleDefault,
+      type: json.type || '주제 및 요지 추론',
+      translation: json.translation || '지문 직독직해 한국어 번역입니다.',
+      options: json.options && json.options.length === 5 ? json.options : ['① Choice 1', '② Choice 2', '③ Choice 3', '④ Choice 4', '⑤ Choice 5'],
+      answerIndex: typeof json.answerIndex === 'number' ? json.answerIndex : 0,
+      explanation: json.explanation || '지문 주제 및 구문 정밀 해설입니다.',
+      syntaxNotes: json.syntaxNotes || ['주어-동사 수일치 확인', '관계대명사 수식 구문 파악'],
+      vocabList: json.vocabList || [{ word: 'analysis', meaning: '분석' }, { word: 'comprehension', meaning: '이해' }],
+    };
+
+    res.json({ success: true, data });
+  } catch (err: any) {
+    const fallbackIngest = {
+      title: titleDefault,
+      type: '주제 및 요지 추론',
+      translation: '인터넷 및 정보 탐구와 학술적 논지에 관한 글입니다.',
+      options: [
+        '① critical understanding of core concepts',
+        '② traditional approaches to learning',
+        '③ empirical evidence in academic study',
+        '④ technological advancements in research',
+        '⑤ rigid rules in formal education'
+      ],
+      answerIndex: 0,
+      explanation: '지문의 도입부 주제문과 후반부 결론 문장의 논리적 연관성에 따라 ①번이 가장 적절합니다.',
+      syntaxNotes: ['주어-동사 수일치 정밀 분석', '관계대명사절 및 분사구문 수식 범위 구별'],
+      vocabList: [
+        { word: 'curiosity', meaning: '호기심' },
+        { word: 'behavior', meaning: '행동' }
+      ]
+    };
+    res.json({ success: true, data: fallbackIngest, fallback: true });
+  }
 });
 
 export default function handler(req: VercelRequest, res: VercelResponse) {

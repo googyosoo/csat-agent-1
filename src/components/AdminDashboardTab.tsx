@@ -36,6 +36,7 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
   // AI Setek Generator State
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [reportResult, setReportResult] = useState<StudentReportResult | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Load accumulated real data from Firestore DB (or LocalStorage fallback)
@@ -85,7 +86,7 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
         throw new Error(data.error || '보고서 생성 실패');
       }
     } catch (err: any) {
-      alert(`AI 세특 & 피드백 리포트 생성 오류: ${err.message}`);
+      setReportError(`AI 세특 리포트 생성 오류: ${err.message}`);
     } finally {
       setIsGeneratingReport(false);
     }
