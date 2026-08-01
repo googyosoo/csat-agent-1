@@ -43,7 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div>
             <h1 className="font-bold text-slate-100 text-sm leading-tight">2027 진로영어</h1>
-            <span className="text-xs text-blue-400 font-semibold tracking-wider">Gemini 3 Flash AI</span>
+            <span className="text-xs text-blue-400 font-semibold tracking-wider">CSAT Agent AI</span>
           </div>
         </div>
 

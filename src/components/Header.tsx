@@ -60,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div className="flex items-center bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 space-x-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-[11px] font-mono text-slate-400">gemini-3-flash</span>
+          <span className="text-[11px] font-mono text-slate-400">csat-ai-agent</span>
         </div>
 
         {isSpeaking ? (

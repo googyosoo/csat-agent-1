@@ -66,7 +66,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
           <div>
             <h3 className="text-lg font-bold text-white flex items-center space-x-2">
               <i className="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
-              <span>Gemini 수능 변형문항 전문 생성기</span>
+              <span>AI 수능 변형문항 전문 생성기</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               [{selectedPassage.lesson} {selectedPassage.itemNo}] 지문의 논리적 특성에 맞춘 유형별 고품질 수능 문제 정밀 생성

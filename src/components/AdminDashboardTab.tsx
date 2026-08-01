@@ -407,7 +407,7 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
                 <div className="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center text-xl font-bold mx-auto animate-bounce">
                   <i className="fa-solid fa-brain animate-spin"></i>
                 </div>
-                <h4 className="text-sm font-bold text-white">Gemini 3.6 Flash가 학습자 세특 & 피드백을 작성 중입니다...</h4>
+                <h4 className="text-sm font-bold text-white">CSAT AI 오케스트레이터가 학습자 세특 & 피드백을 작성 중입니다...</h4>
                 <p className="text-xs text-slate-400">
                   EBS 지문 학습 실적, 소크라테스 3단계 힌트 응용 및 변형문제 성취도를 종합 분석하는 중입니다.
                 </p>

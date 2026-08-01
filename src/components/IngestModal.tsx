@@ -124,7 +124,7 @@ export const IngestModal: React.FC<IngestModalProps> = ({ onClose, onAddPassage,
             className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 flex items-center space-x-2"
           >
             <i className={`fa-solid ${isIngesting ? 'fa-spinner fa-spin' : 'fa-brain'}`}></i>
-            <span>{isIngesting ? 'Gemini 자동 분석 중...' : 'Gemini로 자동 등록'}</span>
+            <span>{isIngesting ? 'AI 자동 분석 중...' : 'AI로 자동 등록'}</span>
           </button>
         </div>
       </div>
