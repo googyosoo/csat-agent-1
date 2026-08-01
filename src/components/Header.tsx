@@ -55,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const tabs = [
+    { id: 'mylearning', name: '나만의 학습/오답', icon: 'fa-bullseye' },
     { id: 'library', name: '지문분석', icon: 'fa-book-open' },
     { id: 'orchestrator', name: '오케스트레이터', icon: 'fa-network-wired' },
     { id: 'socratic', name: '소크라테스', icon: 'fa-brain' },

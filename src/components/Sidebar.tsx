@@ -2,6 +2,7 @@ import React from 'react';
 import { EBSPassage } from '../types';
 import { User } from '../lib/firebase';
 import { isAdminUser } from '../lib/adminAuth';
+import { SUBJECTS } from '../data/subjects';
 
 interface SidebarProps {
   activeTab: string;
@@ -15,6 +16,8 @@ interface SidebarProps {
   authUser?: User | null;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  selectedSubjectId?: string;
+  onSelectSubject?: (subjectId: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,6 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   authUser,
   isMobileOpen = false,
   onCloseMobile,
+  selectedSubjectId = 'jinro',
+  onSelectSubject,
 }) => {
   const filteredPassages = filterLesson === 'ALL'
     ? dataset
@@ -67,7 +72,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <i className="fa-solid fa-graduation-cap"></i>
               </div>
               <div>
-                <h1 className="font-bold text-slate-100 text-xs sm:text-sm leading-tight">2027 진로영어</h1>
+                <h1 className="font-bold text-slate-100 text-xs sm:text-sm leading-tight">
+                  {SUBJECTS.find(s => s.id === selectedSubjectId)?.name || '2027 진로영어'}
+                </h1>
                 <span className="text-[10px] text-blue-400 font-semibold tracking-wider">CSAT Agent AI</span>
               </div>
             </div>
@@ -84,8 +91,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
+          {/* Phase 3: Single Active Subject Navigation */}
+
         {/* Nav Items */}
         <nav className="p-3 space-y-1">
+          <button
+            type="button"
+            onClick={() => handleTabClick('mylearning')}
+            className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-bold transition-all ${
+              activeTab === 'mylearning' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <i className="fa-solid fa-bullseye w-5 text-center text-purple-400"></i>
+            <span>나만의 학습 & 오답노트</span>
+          </button>
+
           <button
             type="button"
             onClick={() => handleTabClick('library')}

@@ -13,10 +13,13 @@ import { AdminDashboardTab } from './components/AdminDashboardTab';
 import { subscribeToAuth, logout, User } from './lib/firebase';
 import { validateUserAccess, ALLOWED_STUDENT_DOMAIN, ADMIN_EMAILS, isAdminUser } from './lib/adminAuth';
 
+import { MyLearningTab } from './components/MyLearningTab';
+import { SUBJECTS } from './data/subjects';
 import { recordUserLogin } from './lib/analytics';
 
 export default function App() {
   const [dataset, setDataset] = useState<EBSPassage[]>(INITIAL_EBS_DATASET);
+  const [selectedSubjectId, setSelectedSubjectId] = useState('jinro');
   const [activeTab, setActiveTab] = useState('library');
   const [selectedPassage, setSelectedPassage] = useState<EBSPassage>(INITIAL_EBS_DATASET[0]);
   const [filterLesson, setFilterLesson] = useState('ALL');
@@ -31,6 +34,15 @@ export default function App() {
   });
 
   const isAdmin = authUser ? isAdminUser(authUser.email) : false;
+
+  const handleSelectSubject = (subjectId: string) => {
+    setSelectedSubjectId(subjectId);
+    const foundSub = SUBJECTS.find(s => s.id === subjectId);
+    if (foundSub && foundSub.dataset.length > 0) {
+      setDataset(foundSub.dataset);
+      setSelectedPassage(foundSub.dataset[0]);
+    }
+  };
 
   const handleToggleTheme = (mode: 'dark' | 'light') => {
     setTheme(mode);
@@ -100,6 +112,8 @@ export default function App() {
         authUser={authUser}
         isMobileOpen={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        selectedSubjectId={selectedSubjectId}
+        onSelectSubject={handleSelectSubject}
       />
 
       {/* Main Workspace */}
@@ -122,6 +136,18 @@ export default function App() {
 
         {/* Tab Content */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6 pb-20 sm:pb-8">
+          {activeTab === 'mylearning' && (
+            <MyLearningTab
+              dataset={dataset}
+              onSelectPassage={(passageId) => {
+                const found = dataset.find((p) => p.id === passageId);
+                if (found) {
+                  setSelectedPassage(found);
+                  setActiveTab('library');
+                }
+              }}
+            />
+          )}
           {activeTab === 'library' && (
             <LibraryTab
               selectedPassage={selectedPassage}
