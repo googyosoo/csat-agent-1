@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { EBSPassage } from '../types';
-import { recordStudentReflection } from '../lib/analytics';
+import { recordStudentReflection, recordLearningEvent } from '../lib/analytics';
 import { auth } from '../lib/firebase';
 
 interface LibraryTabProps {
@@ -30,6 +30,26 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
   const isAnswered = selectedOption !== null;
   const isCorrect = selectedOption === selectedPassage.answerIndex;
 
+  const handleSelectOption = (idx: number) => {
+    setSelectedOption(idx);
+    if (auth.currentUser?.email) {
+      recordLearningEvent({
+        studentEmail: auth.currentUser.email,
+        studentName: auth.currentUser.displayName || undefined,
+        subject: '진로영어',
+        passageId: selectedPassage.id,
+        lesson: selectedPassage.lesson,
+        itemNo: selectedPassage.itemNo,
+        eventType: 'SOLVE_QUIZ',
+        questionType: selectedPassage.type,
+        difficulty: '수능 표준',
+        selectedIndex: idx,
+        correctIndex: selectedPassage.answerIndex,
+        isCorrect: idx === selectedPassage.answerIndex,
+      });
+    }
+  };
+
   const handleSaveReflection = () => {
     if (!reflectionInput.trim()) return;
 
@@ -42,6 +62,20 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
       passageTitle: selectedPassage.title,
       reflectionText: reflectionInput,
     });
+
+    if (auth.currentUser?.email) {
+      recordLearningEvent({
+        studentEmail: auth.currentUser.email,
+        studentName: auth.currentUser.displayName || undefined,
+        subject: '진로영어',
+        passageId: selectedPassage.id,
+        lesson: selectedPassage.lesson,
+        itemNo: selectedPassage.itemNo,
+        eventType: 'STUDENT_REFLECTION',
+        questionType: selectedPassage.type,
+        reasonText: reflectionInput,
+      });
+    }
 
     setIsSavedReflection(true);
   };
@@ -59,6 +93,15 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
+            <button
+              onClick={() => window.print()}
+              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition-all flex items-center space-x-2 no-print"
+              title="A4 시험지 규격 인쇄 / PDF 저장"
+            >
+              <i className="fa-solid fa-print text-amber-400"></i>
+              <span>A4 인쇄/PDF</span>
+            </button>
+
             {isSpeaking ? (
               <button
                 onClick={onStopSpeak}
@@ -159,7 +202,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
             return (
               <div
                 key={idx}
-                onClick={() => !isAnswered && setSelectedOption(idx)}
+                onClick={() => !isAnswered && handleSelectOption(idx)}
                 className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer flex items-center justify-between group ${optionStyle}`}
               >
                 <span className="text-sm leading-relaxed">{opt}</span>

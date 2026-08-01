@@ -595,7 +595,10 @@ function shuffleTransformOptions(data: any, targetQuestionType: string) {
   };
 }
 
-// 2. CSAT Transformed Question Generator
+// S2 Item Bank Cache Storage Layer
+const itemBankCacheServer = new Map<string, any>();
+
+// 2. CSAT Transformed Question Generator (with S2 Item Bank Caching)
 app.post('/api/gemini/transform', async (req, res) => {
   const invalidError = validateRequestBody(req.body, { checkType: true });
   if (invalidError) {
@@ -603,6 +606,13 @@ app.post('/api/gemini/transform', async (req, res) => {
   }
 
   const { passage, lesson, itemNo, targetQuestionType = '빈칸 추론', difficulty = '수능 표준', customApiKey } = req.body;
+
+  // S2 Item Bank Lookup
+  const cacheKey = `${lesson || 'EBS'}_${itemNo || '지문'}_${targetQuestionType}_${difficulty}`;
+  if (itemBankCacheServer.has(cacheKey)) {
+    console.log(`[Server Item Bank Cache Hit]: 0ms response for ${cacheKey}`);
+    return res.json({ success: true, data: itemBankCacheServer.get(cacheKey), cached: true, itemBankHit: true });
+  }
   try {
     const ai = getGenAIClient(customApiKey);
 
@@ -692,12 +702,15 @@ Difficulty Level: ${difficulty}`;
       rationale: json.rationale || json.explanation || '지문의 정밀 구문 및 흐름상 정답이 도출됩니다.',
     };
     const finalOutput = shuffleTransformOptions(formattedData, targetQuestionType);
+    itemBankCacheServer.set(cacheKey, finalOutput);
     res.json({ success: true, data: finalOutput });
   } catch (error: any) {
     console.info('[Transform API] Operating with intelligent fallback engine.');
     try {
       const fallbackData = buildTransformFallback(req.body || {});
-      res.json({ success: true, data: fallbackData, fallback: true });
+      const finalFallback = shuffleTransformOptions(fallbackData, targetQuestionType);
+      itemBankCacheServer.set(cacheKey, finalFallback);
+      res.json({ success: true, data: finalFallback, fallback: true });
     } catch (fbErr: any) {
       res.status(500).json({ success: false, error: '변형 문항 생성 중 오류가 발생했습니다.' });
     }

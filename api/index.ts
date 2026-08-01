@@ -285,7 +285,10 @@ function shuffleTransformOptions(data: any, targetQuestionType: string) {
   };
 }
 
-// 3. Transform Endpoint
+// Item Bank In-Memory / Persistent Cache Layer
+const itemBankCache = new Map<string, any>();
+
+// 3. Transform Endpoint (with S2 Item Bank Caching)
 app.post('/api/gemini/transform', async (req, res) => {
   const invalidError = validateRequestBody(req.body, { checkType: true });
   if (invalidError) {
@@ -293,6 +296,14 @@ app.post('/api/gemini/transform', async (req, res) => {
   }
 
   const { passage = '', lesson = '', itemNo = '', targetQuestionType = '빈칸 추론', difficulty = '수능 표준', customApiKey } = req.body;
+  
+  // S2 Item Bank Cache Key
+  const cacheKey = `${lesson}_${itemNo}_${targetQuestionType}_${difficulty}`;
+  if (itemBankCache.has(cacheKey)) {
+    console.log(`[Item Bank Hit]: 0ms response for ${cacheKey}`);
+    return res.json({ success: true, data: itemBankCache.get(cacheKey), cached: true, itemBankHit: true });
+  }
+
   try {
     const ai = getGenAIClient(customApiKey);
     const response = await ai.models.generateContent({
@@ -313,6 +324,10 @@ app.post('/api/gemini/transform', async (req, res) => {
     };
 
     const finalOutput = shuffleTransformOptions(formattedData, targetQuestionType);
+    
+    // Store in Item Bank Cache
+    itemBankCache.set(cacheKey, finalOutput);
+
     res.json({ success: true, data: finalOutput });
   } catch {
     const fallbackData = {
@@ -331,6 +346,10 @@ app.post('/api/gemini/transform', async (req, res) => {
       rationale: '지문 전체의 논지 흐름상 주제와 직결되는 ①번이 가장 적절합니다.',
     };
     const finalFallback = shuffleTransformOptions(fallbackData, targetQuestionType);
+    
+    // Store fallback in cache
+    itemBankCache.set(cacheKey, finalFallback);
+
     res.json({ success: true, data: finalFallback, fallback: true });
   }
 });

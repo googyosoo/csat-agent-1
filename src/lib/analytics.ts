@@ -3,7 +3,7 @@
  */
 
 import { db } from './firebase';
-import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export interface StudentActivity {
   id: string;
@@ -391,4 +391,66 @@ export function calculateAnalyticsMetrics(students: StudentActivity[]): Analytic
     totalGeneratedQuestions,
     totalSocraticConversations,
   };
+}
+
+/**
+ * Phase 1 S1: Append-only Event Logging for Student Learning Analytics
+ */
+export interface LearningEvent {
+  studentEmail: string;
+  studentName?: string;
+  subject: '진로영어' | '심화영어II';
+  passageId: string;
+  lesson: string;
+  itemNo: string;
+  eventType: 'SOLVE_QUIZ' | 'SOCRATIC_QUESTION' | 'STUDENT_REFLECTION' | 'GENERATE_QUESTION';
+  questionType?: string;
+  difficulty?: string;
+  selectedIndex?: number;
+  correctIndex?: number;
+  isCorrect?: boolean;
+  reasonText?: string; // 학생이 작성한 정답/생각 근거 (세특 생기부 축적 자산)
+  elapsedMs?: number;
+  tutorTurns?: number;
+  hintLevelUsed?: number;
+  createdAt?: string;
+}
+
+const STORAGE_KEY_EVENTS = 'csat_learning_events_v1';
+
+export async function recordLearningEvent(event: Omit<LearningEvent, 'createdAt'>): Promise<void> {
+  const payload = {
+    ...event,
+    createdAt: new Date().toISOString(),
+  };
+
+  // 1. Save to LocalStorage append-only array
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_EVENTS);
+    const list: LearningEvent[] = raw ? JSON.parse(raw) : [];
+    list.unshift(payload);
+    localStorage.setItem(STORAGE_KEY_EVENTS, JSON.stringify(list.slice(0, 100)));
+  } catch (err) {
+    console.warn('[LocalStorage recordLearningEvent Failed]:', err);
+  }
+
+  // 2. Append to Firestore `events` collection
+  try {
+    await addDoc(collection(db, 'events'), {
+      ...event,
+      timestamp: serverTimestamp(),
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('[Firestore recordLearningEvent Failed]:', err);
+  }
+}
+
+export function getStoredLearningEvents(): LearningEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_EVENTS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 }

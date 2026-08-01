@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { EBSPassage, GeneratedItem } from '../types';
 import { safeFetchJson } from '../lib/api';
-import { recordGeneratorUsage } from '../lib/analytics';
+import { recordGeneratorUsage, recordLearningEvent } from '../lib/analytics';
 import { auth } from '../lib/firebase';
 
 interface GeneratorTabProps {
@@ -19,6 +19,28 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
   const [showOriginalPassage, setShowOriginalPassage] = useState(true);
 
   const [generatorError, setGeneratorError] = useState<string | null>(null);
+
+  const handleSelectUserChoice = (idx: number) => {
+    setUserChoice(idx);
+    setShowAnalysis(true);
+    if (auth.currentUser?.email && generatedItem) {
+      recordLearningEvent({
+        studentEmail: auth.currentUser.email,
+        studentName: auth.currentUser.displayName || undefined,
+        subject: '진로영어',
+        passageId: selectedPassage.id,
+        lesson: selectedPassage.lesson,
+        itemNo: selectedPassage.itemNo,
+        eventType: 'SOLVE_QUIZ',
+        questionType: targetType,
+        difficulty,
+        selectedIndex: idx,
+        correctIndex: generatedItem.correctIndex,
+        isCorrect: idx === generatedItem.correctIndex,
+        reasonText: generatedItem.rationale,
+      });
+    }
+  };
 
   const generateQuestion = async () => {
     if (isGenerating) return;
@@ -135,13 +157,20 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
               <div className="flex items-center space-x-2">
                 <span className="text-xs font-bold text-amber-300 bg-amber-500/20 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center space-x-1">
                   <i className="fa-solid fa-list-check text-[10px]"></i>
-                  <span>유형: {generatedItem.type || targetQuestionType}</span>
+                  <span>유형: {generatedItem.type || targetType}</span>
                 </span>
                 <span className="text-xs font-bold text-purple-300 bg-purple-500/20 px-3 py-1 rounded-lg border border-purple-500/30">
-                  {generatedItem.difficulty || difficulty}
+                  난이도: {difficulty}
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500 font-mono">CSAT Item Specification Compliant</span>
+              <button
+                onClick={() => window.print()}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 no-print"
+                title="생성된 변형문항 A4 시험지 규격 인쇄 / PDF 저장"
+              >
+                <i className="fa-solid fa-print text-amber-400"></i>
+                <span>시험지 인쇄/PDF</span>
+              </button>
             </div>
 
             {/* Instruction */}
@@ -224,10 +253,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
                 return (
                   <div
                     key={idx}
-                    onClick={() => {
-                      setUserChoice(idx);
-                      setShowAnalysis(true);
-                    }}
+                    onClick={() => handleSelectUserChoice(idx)}
                     className={`p-3.5 rounded-xl border text-xs flex items-center justify-between cursor-pointer transition-all ${btnStyle}`}
                   >
                     <span className="flex items-start space-x-3 pr-2">
