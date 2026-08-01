@@ -73,14 +73,14 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto items-end">
             {/* Question Type Selector */}
             <div className="flex flex-col">
               <label className="text-[10px] text-slate-400 font-medium mb-0.5">출제 유형</label>
               <select
                 value={targetType}
                 onChange={(e) => setTargetType(e.target.value)}
-                className="bg-slate-950 text-slate-200 text-xs rounded-xl px-3 py-2 border border-slate-700 font-semibold focus:outline-none focus:border-amber-500"
+                className="bg-slate-950 text-slate-200 text-xs rounded-xl px-3 py-2 border border-slate-700 font-semibold focus:outline-none focus:border-amber-500 w-full"
               >
                 <option value="빈칸 추론">빈칸 추론</option>
                 <option value="어법 판단">어법 판단</option>
@@ -97,7 +97,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
               <select
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value)}
-                className="bg-slate-950 text-slate-200 text-xs rounded-xl px-3 py-2 border border-slate-700 font-semibold focus:outline-none focus:border-amber-500"
+                className="bg-slate-950 text-slate-200 text-xs rounded-xl px-3 py-2 border border-slate-700 font-semibold focus:outline-none focus:border-amber-500 w-full"
               >
                 <option value="수능 표준">수능 표준</option>
                 <option value="고난도 (1등급 구분)">고난도 (1등급 구분)</option>

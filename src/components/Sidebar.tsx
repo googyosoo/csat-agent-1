@@ -13,6 +13,8 @@ interface SidebarProps {
   setFilterLesson: (lesson: string) => void;
   onOpenIngestModal: () => void;
   authUser?: User | null;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -25,6 +27,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setFilterLesson,
   onOpenIngestModal,
   authUser,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
   const filteredPassages = filterLesson === 'ALL'
     ? dataset
@@ -33,25 +37,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const lessons = ['ALL', '08강', '09강', '10강', '11강', '12강'];
   const isAdmin = authUser ? isAdminUser(authUser.email) : false;
 
+  const handleTabClick = (tab: string) => {
+    setActiveTab(tab);
+    if (onCloseMobile) onCloseMobile();
+  };
+
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between z-20 shrink-0 h-screen">
-      <div>
-        {/* App Logo */}
-        <div className="p-5 border-b border-slate-800 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-purple-600 to-cyan-500 flex items-center justify-center text-white font-black text-xl shadow-lg">
-            <i className="fa-solid fa-graduation-cap"></i>
+    <>
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
+        <div
+          onClick={onCloseMobile}
+          className="md:hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 transition-opacity"
+        />
+      )}
+
+      <aside
+        className={`w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0 h-screen overflow-y-auto transition-transform duration-300 ${
+          isMobileOpen
+            ? 'fixed inset-y-0 left-0 translate-x-0 z-50 shadow-2xl'
+            : 'fixed inset-y-0 left-0 -translate-x-full md:relative md:translate-x-0 z-20'
+        }`}
+      >
+        <div>
+          {/* App Logo & Mobile Close Button */}
+          <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-purple-600 to-cyan-500 flex items-center justify-center text-white font-black text-lg shadow-lg shrink-0">
+                <i className="fa-solid fa-graduation-cap"></i>
+              </div>
+              <div>
+                <h1 className="font-bold text-slate-100 text-xs sm:text-sm leading-tight">2027 진로영어</h1>
+                <span className="text-[10px] text-blue-400 font-semibold tracking-wider">CSAT Agent AI</span>
+              </div>
+            </div>
+
+            {/* Mobile Close Icon */}
+            {onCloseMobile && (
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="md:hidden w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-xs transition-all"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            )}
           </div>
-          <div>
-            <h1 className="font-bold text-slate-100 text-sm leading-tight">2027 진로영어</h1>
-            <span className="text-xs text-blue-400 font-semibold tracking-wider">CSAT Agent AI</span>
-          </div>
-        </div>
 
         {/* Nav Items */}
         <nav className="p-3 space-y-1">
           <button
             type="button"
-            onClick={() => setActiveTab('library')}
+            onClick={() => handleTabClick('library')}
             className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'library' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
             }`}
@@ -62,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveTab('orchestrator')}
+            onClick={() => handleTabClick('orchestrator')}
             className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'orchestrator' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
             }`}
@@ -73,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveTab('socratic')}
+            onClick={() => handleTabClick('socratic')}
             className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'socratic' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
             }`}
@@ -84,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveTab('generator')}
+            onClick={() => handleTabClick('generator')}
             className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'generator' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
             }`}
@@ -95,7 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveTab('vocab')}
+            onClick={() => handleTabClick('vocab')}
             className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'vocab' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
             }`}
@@ -108,7 +145,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isAdmin && (
             <button
               type="button"
-              onClick={() => setActiveTab('admin')}
+              onClick={() => handleTabClick('admin')}
               className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-bold transition-all border border-purple-500/30 ${
                 activeTab === 'admin'
                   ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-950/50'
@@ -159,6 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               const found = dataset.find(p => p.id === e.target.value);
               if (found) {
                 setSelectedPassage(found);
+                if (onCloseMobile) onCloseMobile();
               }
             }}
           >
@@ -175,5 +213,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
     </aside>
-  );
+  </>
+);
 };

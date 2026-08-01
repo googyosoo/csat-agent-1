@@ -155,9 +155,9 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Terminal Window */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex flex-col h-[580px] shadow-xl">
+        <div className="bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-800 flex flex-col h-[380px] sm:h-[520px] lg:h-[580px] shadow-xl">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
             <span className="text-xs font-bold text-slate-300 flex items-center space-x-2">
               <i className="fa-solid fa-terminal text-purple-400"></i>
@@ -189,7 +189,7 @@ export const OrchestratorTab: React.FC<OrchestratorTabProps> = ({ selectedPassag
         </div>
 
         {/* Output Report Cards */}
-        <div className="space-y-4 overflow-y-auto max-h-[580px]">
+        <div className="space-y-4 overflow-y-auto max-h-[480px] sm:max-h-[580px]">
           {agentOutputs ? (
             <div className="space-y-4">
               {/* 1. 핵심 주제 및 요지 분석 */}

@@ -168,7 +168,7 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
       </div>
 
       {/* KPI Top Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-bold">누적 수강 학생 수</span>

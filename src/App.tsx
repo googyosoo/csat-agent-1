@@ -23,6 +23,7 @@ export default function App() {
   const [customApiKey, setCustomApiKey] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [showIngestModal, setShowIngestModal] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [deniedReason, setDeniedReason] = useState<string | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -81,7 +82,7 @@ export default function App() {
 
   return (
     <div className={`flex h-screen overflow-hidden bg-slate-950 text-slate-100 font-sans transition-all ${theme === 'light' ? 'theme-light' : ''}`}>
-      {/* Sidebar */}
+      {/* Sidebar (Mobile Responsive Drawer) */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -90,8 +91,13 @@ export default function App() {
         setSelectedPassage={setSelectedPassage}
         filterLesson={filterLesson}
         setFilterLesson={setFilterLesson}
-        onOpenIngestModal={() => setShowIngestModal(true)}
+        onOpenIngestModal={() => {
+          setIsMobileMenuOpen(false);
+          setShowIngestModal(true);
+        }}
         authUser={authUser}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
       {/* Main Workspace */}
@@ -106,10 +112,11 @@ export default function App() {
           authUser={authUser}
           theme={theme}
           onToggleTheme={handleToggleTheme}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         />
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 pb-20 sm:pb-8">
           {activeTab === 'library' && (
             <LibraryTab
               selectedPassage={selectedPassage}

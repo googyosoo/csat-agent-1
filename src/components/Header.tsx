@@ -12,6 +12,7 @@ interface HeaderProps {
   authUser: User | null;
   theme: 'dark' | 'light';
   onToggleTheme: (mode: 'dark' | 'light') => void;
+  onOpenMobileMenu?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   authUser,
   theme,
   onToggleTheme,
+  onOpenMobileMenu,
 }) => {
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
 
@@ -47,22 +49,34 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-14 border-b border-slate-800 px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md shrink-0 z-10">
-      <div className="flex items-center space-x-3 truncate">
-        <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold text-xs border border-blue-500/30 shrink-0">
+    <header className="h-14 border-b border-slate-800 px-3 sm:px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md shrink-0 z-10">
+      <div className="flex items-center space-x-2 sm:space-x-3 truncate">
+        {/* Mobile Menu Hamburger Button */}
+        {onOpenMobileMenu && (
+          <button
+            type="button"
+            onClick={onOpenMobileMenu}
+            className="md:hidden w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs shrink-0 transition-all border border-slate-700"
+            title="메뉴 열기"
+          >
+            <i className="fa-solid fa-bars"></i>
+          </button>
+        )}
+
+        <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold text-[10px] sm:text-xs border border-blue-500/30 shrink-0">
           {selectedPassage.lesson} {selectedPassage.itemNo}
         </span>
-        <span className="text-xs text-slate-400 shrink-0">[{selectedPassage.type}]</span>
-        <h2 className="text-sm font-bold text-slate-200 truncate max-w-md">{selectedPassage.title}</h2>
+        <span className="text-[11px] sm:text-xs text-slate-400 shrink-0 hidden sm:inline">[{selectedPassage.type}]</span>
+        <h2 className="text-xs sm:text-sm font-bold text-slate-200 truncate max-w-[120px] sm:max-w-md">{selectedPassage.title}</h2>
       </div>
 
-      <div className="flex items-center space-x-3 shrink-0">
-        <div className="hidden lg:flex items-center bg-slate-950 px-2.5 py-1 rounded-lg border border-emerald-500/30 space-x-1.5">
+      <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+        <div className="hidden xl:flex items-center bg-slate-950 px-2.5 py-1 rounded-lg border border-emerald-500/30 space-x-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span className="text-[11px] font-medium text-emerald-300">서버 시스템 연동 (유료 키 입력 불필요)</span>
         </div>
 
-        <div className="flex items-center bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 space-x-2">
+        <div className="hidden md:flex items-center bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 space-x-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
           <span className="text-[11px] font-mono text-slate-400">csat-ai-agent</span>
         </div>
