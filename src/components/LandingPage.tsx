@@ -34,7 +34,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason }) => {
           </div>
           <div>
             <h1 className="font-extrabold text-slate-100 text-base leading-tight">2027 심인고등학교</h1>
-            <span className="text-xs text-blue-400 font-semibold tracking-wider">CSAT Agent AI 학습 플랫폼</span>
+            <span className="text-xs text-blue-400 font-semibold tracking-wider">진로영어 CSAT-AI Engine</span>
           </div>
         </div>
 

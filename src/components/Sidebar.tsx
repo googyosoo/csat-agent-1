@@ -75,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <h1 className="font-bold text-slate-100 text-xs sm:text-sm leading-tight">
                   {SUBJECTS.find(s => s.id === selectedSubjectId)?.name || '2027 진로영어'}
                 </h1>
-                <span className="text-[10px] text-blue-400 font-semibold tracking-wider">CSAT Agent AI</span>
+                <span className="text-[10px] text-blue-400 font-semibold tracking-wider">진로영어 CSAT-AI Engine</span>
               </div>
             </div>
 
