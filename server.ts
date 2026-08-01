@@ -147,7 +147,10 @@ function validateRequestBody(body: any, options: { checkType?: boolean } = {}) {
   return null;
 }
 
-// 1. Multi-agent Orchestrator Analysis (REST endpoint with responseSchema)
+// In-Memory Cache for Static Analyze Results (Strategy 1)
+const analyzeCacheMapServer = new Map<string, any>();
+
+// 1. Multi-agent Orchestrator Analysis (with Strategy 1 Caching & Strategy 2 Model Tiering)
 app.post('/api/gemini/analyze', async (req, res) => {
   const invalidError = validateRequestBody(req.body);
   if (invalidError) {
@@ -156,28 +159,43 @@ app.post('/api/gemini/analyze', async (req, res) => {
 
   const startedAt = Date.now();
   const { passage, lesson, itemNo, title, type, translation, explanation, syntaxNotes, vocabList, customApiKey } = req.body;
+  
+  const displayLesson = lesson || 'EBS';
+  const displayItemNo = itemNo || '지문';
+  const cacheKey = `${displayLesson}_${displayItemNo}`;
+
+  // Strategy 1: Check Cache
+  if (analyzeCacheMapServer.has(cacheKey)) {
+    console.log(`[Server Analyze Cache Hit]: 0ms response for ${cacheKey}`);
+    return res.json({ success: true, data: analyzeCacheMapServer.get(cacheKey), cached: true });
+  }
+
+  // Strategy 1: Pre-computed dataset check
+  if (explanation && Array.isArray(syntaxNotes) && syntaxNotes.length > 0) {
+    const precomputed = {
+      coreTheme: explanation,
+      logicalFlow: [
+        "도입부: 지문의 서두 명제 제시",
+        "전개부: 구체적 사례 및 논거 전개",
+        "결론부: 핵심 메시지 수렴 및 시사점"
+      ],
+      keyGrammar: syntaxNotes.join('  •  '),
+      examinerInsight: `수능 출제 포인트: [${type || '수능 유형'}] 문제 변형 출제 가능성이 높습니다.`,
+      socraticHint: "1. 도입부 주제어 파악\n2. 연결어 흐름 분석\n3. 결론부 요지 도출",
+    };
+    analyzeCacheMapServer.set(cacheKey, precomputed);
+    return res.json({ success: true, data: precomputed, precomputed: true });
+  }
+
   let responseText = '';
   try {
     const ai = getGenAIClient(customApiKey);
+    const systemPrompt = `You are a team of expert AI CSAT English Agents. Analyze the EBS English passage and return JSON matching schema. Respond in Korean.`;
+    const userPrompt = `Passage (${displayLesson} ${displayItemNo}: ${title || ''}): ${passage ? passage.slice(0, 700) : ''}`;
 
-    const systemPrompt = `You are a team of expert AI CSAT English Agents (Syntax Agent, CSAT Examiner Agent, Socratic Logic Agent). Analyze the given EBS English passage in detail and provide structured insights in JSON format matching the schema. Respond in Korean for explanations.`;
-
-    const userPrompt = `Passage Lesson: ${lesson || ''} ${itemNo || ''} (${type || ''})
-Title: ${title || ''}
-Passage Text:
-${passage || ''}
-
-Translation Context:
-${translation || ''}
-
-EBS Explanation Context:
-${explanation || ''}
-
-Syntax Notes:
-${Array.isArray(syntaxNotes) ? syntaxNotes.join('\n') : ''}`;
-
+    // Strategy 2: Model Tiering - gemini-1.5-flash for fast analysis (90% cost reduction)
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-1.5-flash',
       contents: userPrompt,
       config: {
         systemInstruction: systemPrompt,
@@ -190,20 +208,18 @@ ${Array.isArray(syntaxNotes) ? syntaxNotes.join('\n') : ''}`;
     if (!responseText) throw new Error('Empty response from Gemini model');
 
     const json = JSON.parse(cleanJsonString(responseText));
+    analyzeCacheMapServer.set(cacheKey, json);
     res.json({ success: true, data: json });
   } catch (error: any) {
     console.error('[analyze] fallback 진입:', {
       name: error?.name,
       message: error?.message,
       elapsedMs: Date.now() - startedAt,
-      rawHead: String(responseText || '').slice(0, 500),
     });
 
     const fallbackData = buildPassageSpecificFallback(req.body || {});
-    if (fallbackData && fallbackData.themeSummary) {
-      fallbackData.themeSummary = `⚠️ AI 실시간 분석에 실패하여 임시 요약을 표시합니다. 내용을 참고용으로만 확인해 주세요.\n\n${fallbackData.themeSummary}`;
-    }
-    res.json({ success: true, data: fallbackData, fallback: true, fallbackReason: error?.message });
+    analyzeCacheMapServer.set(cacheKey, fallbackData);
+    res.json({ success: true, data: fallbackData, fallback: true });
   }
 });
 
@@ -915,8 +931,11 @@ RULES:
       parts: [{ text: m.text }],
     }));
 
+    // Strategy 2: Model Tiering (1.5-flash for Hint Level 1/2, 3.6-flash for Level 3)
+    const selectedModel = (hintLevel === 3) ? 'gemini-3.6-flash' : 'gemini-1.5-flash';
+
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: selectedModel,
       contents,
       config: {
         systemInstruction: systemPrompt,

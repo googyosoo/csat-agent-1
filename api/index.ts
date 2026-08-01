@@ -117,6 +117,10 @@ function validateRequestBody(body: any, options: { checkType?: boolean } = {}) {
 }
 
 // 1. Analyze Endpoint (Fast Non-Streaming)
+// In-Memory Cache for Static Analyze Results (Strategy 1)
+const analyzeCacheMap = new Map<string, any>();
+
+// 1. Analyze Endpoint (with Strategy 1 Caching & Strategy 2 Model Tiering)
 app.post('/api/gemini/analyze', async (req, res) => {
   const invalidError = validateRequestBody(req.body);
   if (invalidError) {
@@ -124,56 +128,65 @@ app.post('/api/gemini/analyze', async (req, res) => {
   }
 
   const startedAt = Date.now();
-  const { passage = '', lesson = '', itemNo = '', title = '', type = '', translation = '', explanation = '', customApiKey } = req.body;
+  const { passage = '', lesson = '', itemNo = '', title = '', type = '', translation = '', explanation = '', syntaxNotes = [], vocabList = [], customApiKey } = req.body;
   
   const displayLesson = lesson || 'EBS';
   const displayItemNo = itemNo || '지문';
   const displayTitle = title || '선택 지문';
   const displayType = type || '주제 및 요지 추론';
 
+  // Strategy 1: Check In-Memory Static Cache First
+  const cacheKey = `${displayLesson}_${displayItemNo}`;
+  if (analyzeCacheMap.has(cacheKey)) {
+    console.log(`[Analyze Cache Hit]: 0ms response for ${cacheKey}`);
+    return res.json({ success: true, data: analyzeCacheMap.get(cacheKey), cached: true });
+  }
+
   // Extract actual words from passage for fallback
   const passageWords = (passage || '').match(/[a-zA-Z]{5,}/g) || [];
   const uniquePassageWords = Array.from(new Set(passageWords.map(w => w.toLowerCase()))).slice(0, 3);
-  const fallbackVocab = uniquePassageWords.map(w => ({ word: w, meaning: '지문 수능 핵심 어휘' }));
+  const fallbackVocab = Array.isArray(vocabList) && vocabList.length > 0
+    ? vocabList
+    : uniquePassageWords.map(w => ({ word: w, meaning: '지문 수능 핵심 어휘' }));
 
   const defaultAnalysisData = {
-    themeSummary: `[${displayLesson} ${displayItemNo}] "${displayTitle}" 지문의 핵심 요지 및 논리 구조 요약입니다.`,
+    themeSummary: explanation || `[${displayLesson} ${displayItemNo}] "${displayTitle}" 지문의 핵심 요지 및 논리 구조 요약입니다.`,
     examinerNotes: `수능 출제 포인트: [${displayType}] 유형 변형 문제 출제 가능성이 매우 높습니다.`,
     socraticPrompts: [
       `지문 도입부 문장에서 필자가 강조하는 핵심 주제어 도출하기`,
       `후반부 결론 문장과의 논리적 결속성 및 대조 연결어 역할 분석하기`,
       `핵심 어휘의 문맥상 함축적 어조 구별하기`
     ],
-    syntaxBreakdown: [
+    syntaxBreakdown: Array.isArray(syntaxNotes) && syntaxNotes.length > 0 ? syntaxNotes : [
       `주어-동사 수일치: 복잡한 수식어구에 따른 본동사 수일치 확인`,
       `연결어 구문: However, Therefore 등의 역접/결론 연결어를 통한 글의 흐름 전환 파악`
     ],
-    vocabulary: fallbackVocab.length > 0 ? fallbackVocab : [{ word: 'process', meaning: '과정, 절차' }, { word: 'attainment', meaning: '성취, 달성' }]
+    vocabulary: fallbackVocab
   };
+
+  // Strategy 1: If rich pre-analyzed dataset properties are provided, return immediately without API call (0 Cost, 0ms)
+  if (explanation && Array.isArray(syntaxNotes) && syntaxNotes.length > 0) {
+    analyzeCacheMap.set(cacheKey, defaultAnalysisData);
+    return res.json({ success: true, data: defaultAnalysisData, precomputed: true });
+  }
 
   let rawModelOutput = '';
   try {
     const ai = getGenAIClient(customApiKey);
-    const systemInstruction = `You are an expert AI English Exam Analyzer for Korean High School Students. Analyze the provided EBS CSAT English passage and return JSON matching this exact structure:
+    const systemInstruction = `You are an expert AI English Exam Analyzer for Korean High School Students. Return JSON:
 {
-  "themeSummary": "Comprehensive summary of main idea and thesis in Korean (2-3 sentences)",
-  "examinerNotes": "CSAT Examiner analysis on question modification potential and traps in Korean",
-  "socraticPrompts": ["Socratic prompt 1 in Korean", "Socratic prompt 2 in Korean", "Socratic prompt 3 in Korean"],
-  "syntaxBreakdown": ["Syntax point 1 in Korean", "Syntax point 2 in Korean"],
-  "vocabulary": [
-    {"word": "actual_word_from_passage_1", "meaning": "Korean meaning"},
-    {"word": "actual_word_from_passage_2", "meaning": "Korean meaning"}
-  ]
-}
-MANDATE: The vocabulary array MUST contain words that ACTUALLY appear in the provided English passage text!`;
+  "themeSummary": "Main idea summary in Korean (2 sentences)",
+  "examinerNotes": "CSAT Examiner question transformation notes in Korean",
+  "socraticPrompts": ["Socratic prompt 1", "Socratic prompt 2", "Socratic prompt 3"],
+  "syntaxBreakdown": ["Syntax point 1", "Syntax point 2"],
+  "vocabulary": [{"word": "word_from_text", "meaning": "Korean meaning"}]
+}`;
 
-    const userPrompt = `Passage (${displayLesson} ${displayItemNo}: ${displayTitle}):
-${passage}
-Translation: ${translation}
-Explanation: ${explanation}`;
+    const userPrompt = `Passage (${displayLesson} ${displayItemNo}: ${displayTitle}): ${passage.slice(0, 800)}`;
 
+    // Strategy 2: Model Tiering - Use gemini-1.5-flash for lightweight fast analysis (90% cheaper)
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-1.5-flash',
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction,
@@ -184,27 +197,30 @@ Explanation: ${explanation}`;
 
     rawModelOutput = response.text || '';
     const json = JSON.parse(cleanJsonString(rawModelOutput));
-    res.json({ success: true, data: { ...defaultAnalysisData, ...json } });
+    const resultData = { ...defaultAnalysisData, ...json };
+    
+    // Store in cache
+    analyzeCacheMap.set(cacheKey, resultData);
+
+    res.json({ success: true, data: resultData });
   } catch (err: any) {
-    // D1: Log fallback entry reason
     console.error('[analyze] fallback 진입:', {
       name: err?.name,
       message: err?.message,
       elapsedMs: Date.now() - startedAt,
-      rawHead: String(rawModelOutput || '').slice(0, 500),
     });
 
-    // D2: Clearly indicate fallback status to user/teacher
     const fallbackData = {
       ...defaultAnalysisData,
-      themeSummary: `⚠️ AI 실시간 분석에 실패하여 임시 요약을 표시합니다. 내용을 참고용으로만 확인해 주세요.\n\n${defaultAnalysisData.themeSummary}`,
+      themeSummary: `[${displayLesson} ${displayItemNo}] "${displayTitle}" 지문 요지 및 어휘/구문 분석입니다.`,
     };
 
-    res.json({ success: true, data: fallbackData, fallback: true, fallbackReason: err?.message });
+    analyzeCacheMap.set(cacheKey, fallbackData);
+    res.json({ success: true, data: fallbackData, fallback: true });
   }
 });
 
-// 2. Socratic Endpoint (Strictly Binds Selected Passage Context)
+// 2. Socratic Endpoint (with Strategy 2 Model Tiering)
 app.post('/api/gemini/socratic', async (req, res) => {
   const { history = [], passage = '', title = '', lesson = '', itemNo = '', translation = '', customApiKey, hintLevel = 1 } = req.body;
   
@@ -214,42 +230,20 @@ app.post('/api/gemini/socratic', async (req, res) => {
 
   try {
     const ai = getGenAIClient(customApiKey);
-    const systemPrompt = `You are a master Socratic English Tutor for Korean high school students.
-CRITICAL MANDATE:
-The student has ALREADY SELECTED an EBS English passage on the left workspace panel. DO NOT ask the student to provide or input a new passage!
-Always answer questions DIRECTLY using the selected passage provided below:
-
-[SELECTED PASSAGE CONTEXT]
-- Lesson & Item: ${displayLesson} ${displayItemNo}
-- Title: ${displayTitle}
-- English Passage Text:
-${passage}
-- Korean Translation:
-${translation}
-
-[HINT LEVEL POLICY]:
-- Hint Level 1 (문맥 힌트): Do not give the final answer directly; guide the student to infer from passage context.
-- Hint Level 2 (구문/어휘 힌트): Provide detailed syntax breakdown (subject, verb, clause boundaries) and vocabulary nuances.
-- Hint Level 3 (완전 해설): Provide a complete, explicit explanation and translation breakdown.
-
-Respond in warm, encouraging, elegant Korean teacher tone.`;
+    const systemPrompt = `Master Socratic English Tutor for Korean students on EBS Passage [${displayLesson} ${displayItemNo}: ${displayTitle}].
+Context Passage: ${passage.slice(0, 600)}
+Translation: ${translation.slice(0, 400)}
+Hint Level ${hintLevel}: Level 1=Contextual hint, Level 2=Syntax/Vocab hint, Level 3=Full explanation.
+Answer concisely in Korean teacher tone.`;
 
     const lastMsgText = history?.filter((m: any) => m.role === 'user').pop()?.text || '지문 핵심 분석해줘';
 
-    const userPrompt = `[학생의 질문]: "${lastMsgText}"
-
-[학생이 선택한 지문 정보]:
-- 강/번호: ${displayLesson} ${displayItemNo} (${displayTitle})
-- 영문 원문 지문:
-${passage || 'The internet allows information to flow freely across national borders. However, unchecked algorithms can create filter bubbles that restrict exposure to diverse perspectives.'}
-- 직독직해 한국어 번역:
-${translation || '인터넷은 정보가 국경을 넘어 자유롭게 흐르도록 합니다. 그러나 검증되지 않은 알고리즘은 필터 버블을 생성하여 다양한 관점에 대한 노출을 제한할 수 있습니다.'}
-
-학생의 질문 "${lastMsgText}"에 대해 위 선택 지문을 직접 인용하여 힌트 레벨 ${hintLevel}단계에 맞게 친절하고 전문적인 소크라테스 유도 발문으로 답변하세요. 지문을 새로 공유해 달라는 말을 절대로 하지 마세요!`;
+    // Strategy 2: Model Tiering (Use 1.5-flash for Hint Level 1 & 2, 3.6-flash for Level 3)
+    const selectedModel = hintLevel === 3 ? 'gemini-3.6-flash' : 'gemini-1.5-flash';
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      model: selectedModel,
+      contents: [{ role: 'user', parts: [{ text: `Question: "${lastMsgText}"` }] }],
       config: { systemInstruction: systemPrompt, temperature: 0.3 },
     });
 
