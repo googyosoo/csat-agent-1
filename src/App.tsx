@@ -11,7 +11,7 @@ import { VocabTab } from './components/VocabTab';
 import { IngestModal } from './components/IngestModal';
 import { AdminDashboardTab } from './components/AdminDashboardTab';
 import { subscribeToAuth, logout, User } from './lib/firebase';
-import { validateUserAccess, ALLOWED_STUDENT_DOMAIN, ADMIN_EMAILS } from './lib/adminAuth';
+import { validateUserAccess, ALLOWED_STUDENT_DOMAIN, ADMIN_EMAILS, isAdminUser } from './lib/adminAuth';
 
 import { recordUserLogin } from './lib/analytics';
 
@@ -29,6 +29,8 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('csat_theme_mode') as 'dark' | 'light') || 'dark';
   });
+
+  const isAdmin = authUser ? isAdminUser(authUser.email) : false;
 
   const handleToggleTheme = (mode: 'dark' | 'light') => {
     setTheme(mode);
@@ -113,6 +115,9 @@ export default function App() {
           theme={theme}
           onToggleTheme={handleToggleTheme}
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          isAdmin={isAdmin}
         />
 
         {/* Tab Content */}

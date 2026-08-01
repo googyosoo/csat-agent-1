@@ -59,6 +59,6 @@ export function validateUserAccess(email?: string | null): AccessCheckResult {
   return {
     allowed: false,
     role: 'denied',
-    reason: `접근 제한: 시민고등학교 학생 전용 계정(${ALLOWED_STUDENT_DOMAIN}) 또는 지정 관리자 계정만 로그인할 수 있습니다.`,
+    reason: `접근 제한: 심인고등학교 학생 전용 계정(${ALLOWED_STUDENT_DOMAIN}) 또는 지정 관리자 계정만 로그인할 수 있습니다.`,
   };
 }

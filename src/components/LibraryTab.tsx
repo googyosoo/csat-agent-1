@@ -297,7 +297,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                   <span>🔒 학생 메타인지 소감 및 생기부 성찰 기록은 Google 로그인 후 작성 가능합니다.</span>
                 </div>
                 <p className="text-xs text-slate-400">
-                  시민고등학교 학생 계정(@simin.hs.kr) 또는 지정 관리자 계정으로 우측 상단의 <strong className="text-blue-400">Google 로그인</strong> 후 소감을 작성하실 수 있습니다.
+                  심인고등학교 학생 계정(@simin.hs.kr) 또는 지정 관리자 계정으로 우측 상단의 <strong className="text-blue-400">Google 로그인</strong> 후 소감을 작성하실 수 있습니다.
                 </p>
               </div>
             ) : isSavedReflection ? (
