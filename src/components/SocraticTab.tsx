@@ -179,23 +179,35 @@ export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, custo
       </div>
 
       {/* Input */}
-      <div className="flex items-center space-x-2 shrink-0">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="질문이나 구문/어휘/주제 질문을 입력하세요..."
-          className="flex-1 bg-slate-900 text-slate-100 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-emerald-500"
-        />
-        <button
-          onClick={sendMessage}
-          disabled={isThinking || !input.trim()}
-          className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition-all disabled:opacity-50"
-        >
-          <i className="fa-solid fa-paper-plane"></i>
-        </button>
-      </div>
+      {!auth.currentUser ? (
+        <div className="bg-slate-900/90 p-4 rounded-xl border border-rose-500/40 text-center space-y-1 shrink-0">
+          <div className="text-xs font-bold text-rose-400 flex items-center justify-center space-x-1.5">
+            <i className="fa-solid fa-lock"></i>
+            <span>🔒 소크라테스 AI 튜터 3단계 힌트 질의응답은 Google 로그인 후 이용 가능합니다.</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            우측 상단 <strong className="text-blue-400">Google 로그인</strong> 후 질문을 입력해 주세요. (@simin.hs.kr 학생 전용)
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-center space-x-2 shrink-0">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="질문이나 구문/어휘/주제 질문을 입력하세요..."
+            className="flex-1 bg-slate-900 text-slate-100 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-emerald-500"
+          />
+          <button
+            onClick={sendMessage}
+            disabled={isThinking || !input.trim()}
+            className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition-all disabled:opacity-50"
+          >
+            <i className="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

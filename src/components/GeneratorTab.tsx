@@ -105,14 +105,26 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
               </select>
             </div>
 
-            <button
-              onClick={generateQuestion}
-              disabled={isGenerating}
-              className="mt-4 md:mt-auto px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center space-x-2 disabled:opacity-50 shrink-0"
-            >
-              <i className={`fa-solid ${isGenerating ? 'fa-spinner fa-spin' : 'fa-gear'}`}></i>
-              <span>{isGenerating ? '생성 중...' : '변형 문제 생성'}</span>
-            </button>
+            {!auth.currentUser ? (
+              <div className="mt-4 md:mt-auto p-3 bg-slate-950 rounded-xl border border-rose-500/40 text-center space-y-1">
+                <div className="text-xs font-bold text-rose-400 flex items-center justify-center space-x-1.5">
+                  <i className="fa-solid fa-lock"></i>
+                  <span>🔒 Google 로그인 필요</span>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  변형 문제 생성은 로그인 후 가능합니다.
+                </p>
+              </div>
+            ) : (
+              <button
+                onClick={generateQuestion}
+                disabled={isGenerating}
+                className="mt-4 md:mt-auto px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center space-x-2 disabled:opacity-50 shrink-0"
+              >
+                <i className={`fa-solid ${isGenerating ? 'fa-spinner fa-spin' : 'fa-gear'}`}></i>
+                <span>{isGenerating ? '생성 중...' : '변형 문제 생성'}</span>
+              </button>
+            )}
           </div>
         </div>
 
