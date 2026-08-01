@@ -81,16 +81,59 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
         {/* English Passage Text */}
         <div className="bg-slate-950 p-5 rounded-xl border border-slate-850 font-serif text-slate-100 text-base leading-relaxed tracking-wide select-text">
-          {selectedPassage.passage}
+          <div
+            dangerouslySetInnerHTML={{
+              __html: (selectedPassage.passage || '')
+                .replace(/_{4,}/g, '<u class="inline-block mx-1 px-3 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-md font-bold font-mono text-sm underline decoration-amber-400 decoration-2 underline-offset-4 shadow-inner">[___________]</u>')
+                .replace(/\[\s*______+\s*\]/g, '<u class="inline-block mx-1 px-3 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-md font-bold font-mono text-sm underline decoration-amber-400 decoration-2 underline-offset-4 shadow-inner">[___________]</u>')
+            }}
+          />
+
+          {/* If Question Type is '빈칸 추론' but no underline marker exists in passage text */}
+          {selectedPassage.type === '빈칸 추론' && !/_{4,}|\[\s*______+\s*\]/.test(selectedPassage.passage || '') && (
+            <div className="mt-4 p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl text-xs text-amber-200 font-semibold flex items-center space-x-2">
+              <i className="fa-solid fa-pen-ruler text-amber-400"></i>
+              <span>[ 빈칸 추론 문항 위치 ]:</span>
+              <span className="px-3 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-md font-bold font-mono">[___________]</span>
+            </div>
+          )}
         </div>
+
+        {/* 요약문 완성 전용 [ 요약문 (Summary) ] 카드 */}
+        {(selectedPassage.type === '요약문 완성' || selectedPassage.summarySentence) && (
+          <div className="p-4 bg-purple-950/40 border border-purple-500/40 rounded-xl space-y-2">
+            <div className="text-xs font-bold text-purple-300 flex items-center justify-between border-b border-purple-500/20 pb-2">
+              <span className="flex items-center space-x-1.5">
+                <i className="fa-solid fa-file-pen text-purple-400"></i>
+                <span>[ 요약문 (Summary) ]</span>
+              </span>
+              <span className="text-[10px] text-purple-400 font-normal">빈칸 (A), (B)에 들어갈 말로 가장 적절한 것을 고르시오.</span>
+            </div>
+            <div
+              className="text-sm font-sans text-purple-100 font-medium leading-relaxed"
+              dangerouslySetInnerHTML={{
+                __html: (selectedPassage.summarySentence || `By analyzing the main passage, technology affects (A) [___________] and influences emotional (B) [___________].`)
+                  .replace(/\(A\)\s*([\w-]+)?/g, '<span class="inline-block px-2.5 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded font-bold font-mono text-xs mx-1">(A) [___________]</span>')
+                  .replace(/\(B\)\s*([\w-]+)?/g, '<span class="inline-block px-2.5 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded font-bold font-mono text-xs mx-1">(B) [___________]</span>')
+              }}
+            />
+          </div>
+        )}
 
         {/* Question & Options Header */}
         <div className="pt-2">
           <h4 className="text-sm font-bold text-slate-300 flex items-center space-x-2">
-            <span className="px-2.5 py-0.5 bg-blue-950 text-blue-400 border border-blue-800/60 rounded text-xs">
+            <span className="px-2.5 py-0.5 bg-blue-950 text-blue-400 border border-blue-800/60 rounded text-xs font-bold">
               {selectedPassage.type}
             </span>
-            <span>다음 글의 빈칸에 들어갈 말로 가장 적절한 것을 고르시오.</span>
+            <span>
+              {selectedPassage.type === '빈칸 추론' && '다음 글의 빈칸에 들어갈 말로 가장 적절한 것을 고르시오.'}
+              {selectedPassage.type === '요약문 완성' && '다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?'}
+              {selectedPassage.type === '무관한 문장' && '다음 글에서 전체 흐름과 관계 없는 문장은?'}
+              {selectedPassage.type === '글의 순서' && '주어진 글 다음에 이어질 글의 순서로 가장 적절한 것을 고르시오.'}
+              {selectedPassage.type === '주어진 문장의 위치' && '글의 흐름으로 보아, 주어진 문장이 들어가지에 가장 적절한 곳은?'}
+              {!['빈칸 추론', '요약문 완성', '무관한 문장', '글의 순서', '주어진 문장의 위치'].includes(selectedPassage.type) && '다음 글을 읽고 문항의 정답을 고르시오.'}
+            </span>
           </h4>
         </div>
 
