@@ -10,6 +10,8 @@ interface HeaderProps {
   customApiKey: string;
   setCustomApiKey: (key: string) => void;
   authUser: User | null;
+  theme: 'dark' | 'light';
+  onToggleTheme: (mode: 'dark' | 'light') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +22,8 @@ export const Header: React.FC<HeaderProps> = ({
   customApiKey,
   setCustomApiKey,
   authUser,
+  theme,
+  onToggleTheme,
 }) => {
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
 
@@ -85,6 +89,36 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
+        {/* Theme Mode Selector (Dark / Light) */}
+        <div className="bg-slate-950 p-0.5 rounded-xl border border-slate-800 flex items-center space-x-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => onToggleTheme('dark')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+              theme === 'dark'
+                ? 'bg-slate-800 text-amber-300 font-bold border border-amber-500/30 shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="다크 모드 적용"
+          >
+            <i className="fa-solid fa-moon text-[11px] text-amber-400"></i>
+            <span>다크모드</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggleTheme('light')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+              theme === 'light'
+                ? 'bg-blue-600 text-white font-bold shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="일반(라이트) 모드 적용"
+          >
+            <i className="fa-solid fa-sun text-[11px] text-amber-300"></i>
+            <span>일반모드</span>
+          </button>
+        </div>
+
         {/* Firebase Google SSO Login Button or User Profile */}
         <div className="pl-2 border-l border-slate-800 flex items-center space-x-2">
           {authUser ? (
@@ -93,7 +127,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <img
                   src={authUser.photoURL}
                   alt={authUser.displayName || 'User'}
-                  className="w-6 h-6 rounded-full border border-blue-400 shrink-0"
+                  className="w-6 h-6 rounded-full border border-blue-400 shrink-0 no-invert"
                 />
               ) : (
                 <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">

@@ -25,6 +25,14 @@ export default function App() {
   const [showIngestModal, setShowIngestModal] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [deniedReason, setDeniedReason] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('csat_theme_mode') as 'dark' | 'light') || 'dark';
+  });
+
+  const handleToggleTheme = (mode: 'dark' | 'light') => {
+    setTheme(mode);
+    localStorage.setItem('csat_theme_mode', mode);
+  };
 
   useEffect(() => {
     const unsubscribe = subscribeToAuth(async (user) => {
@@ -72,7 +80,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
+    <div className={`flex h-screen overflow-hidden bg-slate-950 text-slate-100 font-sans transition-all ${theme === 'light' ? 'theme-light' : ''}`}>
       {/* Sidebar */}
       <Sidebar
         activeTab={activeTab}
@@ -96,6 +104,8 @@ export default function App() {
           customApiKey={customApiKey}
           setCustomApiKey={setCustomApiKey}
           authUser={authUser}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
         />
 
         {/* Tab Content */}
