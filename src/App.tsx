@@ -13,6 +13,7 @@ import { AdminDashboardTab } from './components/AdminDashboardTab';
 import { subscribeToAuth, logout, User } from './lib/firebase';
 import { validateUserAccess, ALLOWED_STUDENT_DOMAIN, ADMIN_EMAILS, isAdminUser } from './lib/adminAuth';
 
+import { LandingPage } from './components/LandingPage';
 import { MyLearningTab } from './components/MyLearningTab';
 import { SUBJECTS } from './data/subjects';
 import { recordUserLogin } from './lib/analytics';
@@ -93,6 +94,11 @@ export default function App() {
     setDataset(prev => [newPassage, ...prev]);
     setSelectedPassage(newPassage);
   };
+
+  // If not logged in, render First-screen Entrance Landing Page
+  if (!authUser) {
+    return <LandingPage deniedReason={deniedReason} />;
+  }
 
   return (
     <div className={`flex h-screen overflow-hidden bg-slate-950 text-slate-100 font-sans transition-all ${theme === 'light' ? 'theme-light' : ''}`}>
