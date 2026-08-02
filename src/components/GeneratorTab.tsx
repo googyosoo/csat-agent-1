@@ -51,7 +51,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
     setShowAnalysis(false);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4500);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     try {
       const data = await safeFetchJson('/api/gemini/transform', {
