@@ -588,6 +588,22 @@ function buildTransformFallback(body: any) {
 
   function validateAndFixTransformItem(data: any, originalPassage: string, targetQuestionType: string) {
     let modPassage = String(data.modifiedPassage || data.passage || originalPassage || '');
+
+    // CRITICAL FIX: If question type is NOT '문장 삽입', ALWAYS strip any leftover '[ 주어진 문장 ]' section at top!
+    if (targetQuestionType !== '문장 삽입') {
+      modPassage = modPassage.replace(/^\[\s*(?:주어진\s*문장|주어진문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '');
+      
+      // If not 어법 판단 or 어휘 적절성, strip any leftover ( ① ) ~ ( ⑤ ) tags from body
+      if (targetQuestionType !== '어법 판단' && targetQuestionType !== '어휘 적절성') {
+        modPassage = modPassage.replace(/\(\s*[①②③④⑤1-5]\s*\)/g, '').replace(/\s{2,}/g, ' ');
+      }
+    }
+
+    // If question type is NOT '요약문 완성', strip any leftover '[ 요약문 ]' section at bottom!
+    if (targetQuestionType !== '요약문 완성') {
+      modPassage = modPassage.replace(/\n\n\[\s*(?:요약문|Summary)\s*\][\s\S]*/i, '');
+    }
+
     const sentences = (originalPassage || modPassage)
       .split(/(?<=[.!?])\s+/)
       .map(s => s.trim())
@@ -605,8 +621,8 @@ function buildTransformFallback(body: any) {
           insertedSentence = 'This crucial insight highlights the dynamic relationship between variables.';
         }
 
-        let formattedBody = modPassage;
-        if (!/\(\s*[①②③④⑤1-5]\s*\)/.test(modPassage)) {
+        let formattedBody = modPassage.replace(/^\[\s*(?:주어진\s*문장|주어진문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '');
+        if (!/\(\s*[①②③④⑤1-5]\s*\)/.test(formattedBody)) {
           const remaining = sentences.filter(s => s !== insertedSentence);
           formattedBody = '';
           remaining.forEach((s, idx) => {
@@ -631,7 +647,12 @@ function buildTransformFallback(body: any) {
     if (targetQuestionType === '빈칸 추론') {
       const hasBlank = /______+|\[___________\]|\(\s*_____\s*\)/.test(modPassage);
       if (!hasBlank) {
-        modPassage = `${modPassage.trim()}\n\nTherefore, [___________].`;
+        const lastSent = sentences[sentences.length - 1] || 'Therefore, this principle applies universally.';
+        if (modPassage.includes(lastSent)) {
+          modPassage = modPassage.replace(lastSent, `Therefore, [___________].`);
+        } else {
+          modPassage = `${modPassage.trim()}\n\nTherefore, [___________].`;
+        }
       }
     }
 
