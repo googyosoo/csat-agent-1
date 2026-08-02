@@ -50,10 +50,14 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
     setUserChoice(null);
     setShowAnalysis(false);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
+
     try {
       const data = await safeFetchJson('/api/gemini/transform', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           passage: selectedPassage.passage,
           lesson: selectedPassage.lesson,
@@ -64,6 +68,8 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
         }),
       });
 
+      clearTimeout(timeoutId);
+
       if (data.success && data.data) {
         setGeneratedItem(data.data);
         recordGeneratorUsage(auth.currentUser?.email || 'anonymous');
@@ -71,7 +77,12 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
         throw new Error(data.error || '변형 문항 생성 실패');
       }
     } catch (err: any) {
-      setGeneratorError(`변형 문제 생성 오류: ${err.message}`);
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        setGeneratorError('응답 시간이 초과되었습니다. 지문을 재선택하거나 다시 시도해 주세요.');
+      } else {
+        setGeneratorError(`변형 문제 생성 오류: ${err.message}`);
+      }
     } finally {
       setIsGenerating(false);
     }

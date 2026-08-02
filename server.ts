@@ -796,15 +796,22 @@ ${passage}
 Target Question Type: ${targetQuestionType}
 Difficulty Level: ${difficulty}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-      },
-    });
+    const fetchAiWithTimeout = Promise.race([
+      ai.models.generateContent({
+        model: 'gemini-1.5-flash',
+        contents: userPrompt,
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: 'application/json',
+        },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI response timeout (2.5s limit reached)')), 2500)
+      ),
+    ]);
 
+    const response = await fetchAiWithTimeout;
+    const responseText = response.text || '';
     const json = JSON.parse(cleanJsonString(responseText));
     const formattedData = {
       ...json,

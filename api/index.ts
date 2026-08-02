@@ -532,11 +532,18 @@ app.post('/api/gemini/transform', async (req, res) => {
 
   try {
     const ai = getGenAIClient(customApiKey);
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
-      contents: [{ role: 'user', parts: [{ text: `Generate CSAT ${targetQuestionType} for passage: ${passage}` }] }],
-      config: { responseMimeType: 'application/json' },
-    });
+    const fetchAiWithTimeout = Promise.race([
+      ai.models.generateContent({
+        model: 'gemini-1.5-flash',
+        contents: [{ role: 'user', parts: [{ text: `Generate CSAT ${targetQuestionType} for passage: ${passage}` }] }],
+        config: { responseMimeType: 'application/json' },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI response timeout (2.5s limit reached)')), 2500)
+      ),
+    ]);
+
+    const response = await fetchAiWithTimeout;
     const json = JSON.parse(cleanJsonString(response.text || '{}'));
 
     const formattedData = {
