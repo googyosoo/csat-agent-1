@@ -267,6 +267,45 @@ function cleanOptionTextHelper(raw: string): string {
 }
 
 function parseAnswerIndex(json: any, rawOptions: string[]): number {
+  const ratStr = String(json.rationale || json.explanation || '');
+
+  // Priority 1: Check explicit conclusion statement in rationale (highest authority)
+  const rationaleMatches = [
+    /(?:가장\s*적절한\s*(?:곳|것|위치)은|정답은|위치는)\s*([①②③④⑤1-5])/i,
+    /([①②③④⑤1-5])번\s*(?:이|가)?\s*(?:정답|가장\s*적절|적절)/i,
+    /([①②③④⑤1-5])번\s*(?:위치|자리에|문장)/i,
+    /정답\s*[:는]?\s*([①②③④⑤1-5])/i,
+  ];
+
+  for (const regex of rationaleMatches) {
+    const match = ratStr.match(regex);
+    if (match && match[1]) {
+      const sym = match[1];
+      if (SYMBOL_TO_INDEX[sym] !== undefined) {
+        return SYMBOL_TO_INDEX[sym];
+      }
+    }
+  }
+
+  // Priority 2: Check explicit answer field in JSON (e.g. "answer": "④" or "4")
+  const ansStr = String(json.answer || json.correctAnswer || json.solution || '');
+  for (const [sym, idx] of Object.entries(SYMBOL_TO_INDEX)) {
+    if (ansStr.includes(sym)) {
+      return idx;
+    }
+  }
+
+  // Priority 3: Check distractorAnalysis for true flag
+  if (Array.isArray(json.distractorAnalysis)) {
+    const trueDistractor = json.distractorAnalysis.find((d: any) => d?.isCorrect === true);
+    if (trueDistractor && typeof trueDistractor.optionIndex === 'number') {
+      if (trueDistractor.optionIndex >= 0 && trueDistractor.optionIndex < rawOptions.length) {
+        return trueDistractor.optionIndex;
+      }
+    }
+  }
+
+  // Priority 4: Check correctIndex number field
   if (typeof json.correctIndex === 'number' && Number.isInteger(json.correctIndex)) {
     if (json.correctIndex >= 0 && json.correctIndex < rawOptions.length) {
       return json.correctIndex;
@@ -276,16 +315,9 @@ function parseAnswerIndex(json: any, rawOptions: string[]): number {
     }
   }
 
-  const ansStr = String(json.answer || json.correctAnswer || json.solution || '');
+  // Priority 5: Fallback search for any symbol in rationale
   for (const [sym, idx] of Object.entries(SYMBOL_TO_INDEX)) {
-    if (ansStr.includes(sym)) {
-      return idx;
-    }
-  }
-
-  const ratStr = String(json.rationale || json.explanation || '');
-  for (const [sym, idx] of Object.entries(SYMBOL_TO_INDEX)) {
-    if (ratStr.includes(`${sym}번`) || ratStr.includes(`${sym}가`) || ratStr.includes(`${sym}이`) || ratStr.includes(`${sym} `)) {
+    if (ratStr.includes(`${sym}번`) || ratStr.includes(`${sym}가`) || ratStr.includes(`${sym}이`)) {
       return idx;
     }
   }
@@ -370,8 +402,11 @@ app.post('/api/gemini/transform', async (req, res) => {
   // S2 Item Bank Cache Key
   const cacheKey = `${lesson}_${itemNo}_${targetQuestionType}_${difficulty}`;
   if (itemBankCache.has(cacheKey)) {
-    console.log(`[Item Bank Hit]: 0ms response for ${cacheKey}`);
-    return res.json({ success: true, data: itemBankCache.get(cacheKey), cached: true, itemBankHit: true });
+    const cachedItem = itemBankCache.get(cacheKey);
+    const verifiedItem = shuffleTransformOptions(cachedItem, targetQuestionType);
+    itemBankCache.set(cacheKey, verifiedItem);
+    console.log(`[Item Bank Hit Verified]: 0ms response for ${cacheKey}`);
+    return res.json({ success: true, data: verifiedItem, cached: true, itemBankHit: true });
   }
 
   try {
