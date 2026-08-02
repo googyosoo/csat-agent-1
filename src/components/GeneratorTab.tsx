@@ -223,8 +223,12 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
                 dangerouslySetInnerHTML={{
                   __html: (generatedItem.modifiedPassage || (generatedItem as any).passage || selectedPassage.passage || '')
                     .replace(/<u>/g, '<u class="text-amber-300 font-bold underline decoration-amber-400 decoration-2 underline-offset-4">')
-                    .replace(/\[ 주어진 문장 \]/g, '<div class="p-3 my-2 bg-amber-950/40 border border-amber-500/40 rounded-lg text-amber-200 font-semibold">[ 주어진 문장 ]</div>')
-                    .replace(/\[ 요약문 \]/g, '<div class="p-3 my-2 bg-purple-950/40 border border-purple-500/40 rounded-lg text-purple-200 font-semibold">[ 요약문 ]</div>')
+                    .replace(/\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\]\s*\n?([^\n]+)?/gi, (m, sentence) => {
+                      return `<div class="p-3.5 my-3 bg-amber-950/70 border border-amber-500/50 rounded-xl text-amber-200 font-semibold shadow-md"><span class="text-amber-400 font-bold block mb-1">📌 [ 주어진 문장 ]</span>${sentence || ''}</div>`;
+                    })
+                    .replace(/\[\s*(?:요약문|Summary)\s*\]\s*\n?([^\n]+)?/gi, (m, summary) => {
+                      return `<div class="p-3.5 my-3 bg-purple-950/70 border border-purple-500/50 rounded-xl text-purple-200 font-semibold shadow-md"><span class="text-purple-400 font-bold block mb-1">📝 [ 요약문 ]</span>${summary || ''}</div>`;
+                    })
                 }}
               />
             </div>

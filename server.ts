@@ -579,179 +579,102 @@ function buildTransformFallback(body: any) {
       "critical understanding - 비판적 이해",
       "contextual changes - 맥락적 변화"
     ],
-    syntaxHighlights: [
-      "Therefore/Consequently 등 결론 도출 부사를 활용한 빈칸 추론",
-      "지문 본문의 핵심 어귀 패러프레이징"
-    ]
-  };
-}
-
-// Helper D3: Deterministic option shuffle to remove 1st choice answer bias
-const SYMBOL_TO_INDEX: Record<string, number> = {
-  '①': 0, '②': 1, '③': 2, '④': 3, '⑤': 4,
-  '1': 0, '2': 1, '3': 2, '4': 3, '5': 4,
-};
-
-const INDEX_TO_SYMBOL = ['①', '②', '③', '④', '⑤'];
-
-function cleanOptionTextHelper(raw: string): string {
-  if (!raw || typeof raw !== 'string') return '';
-  return raw.replace(/^[①②③④⑤12345][\.\)]?\s*/, '').trim();
-}
-
-function parseAnswerIndex(json: any, rawOptions: string[]): number {
-  const ratStr = String(json.rationale || json.explanation || '');
-
-  // Priority 1: Check explicit conclusion statement in rationale (highest authority)
-  const rationaleMatches = [
-    /(?:가장\s*적절한\s*(?:곳|것|위치)은|정답은|위치는)\s*([①②③④⑤1-5])/i,
-    /([①②③④⑤1-5])번\s*(?:이|가)?\s*(?:정답|가장\s*적절|적절)/i,
-    /([①②③④⑤1-5])번\s*(?:위치|자리에|문장)/i,
-    /정답\s*[:는]?\s*([①②③④⑤1-5])/i,
-  ];
-
-  for (const regex of rationaleMatches) {
-    const match = ratStr.match(regex);
-    if (match && match[1]) {
-      const sym = match[1];
-      if (SYMBOL_TO_INDEX[sym] !== undefined) {
-        return SYMBOL_TO_INDEX[sym];
-      }
-    }
-  }
-
-  // Priority 2: Check explicit answer field in JSON (e.g. "answer": "④" or "4")
-  const ansStr = String(json.answer || json.correctAnswer || json.solution || '');
-  for (const [sym, idx] of Object.entries(SYMBOL_TO_INDEX)) {
-    if (ansStr.includes(sym)) {
-      return idx;
-    }
-  }
-
-  // Priority 3: Check distractorAnalysis for true flag
-  if (Array.isArray(json.distractorAnalysis)) {
-    const trueDistractor = json.distractorAnalysis.find((d: any) => d?.isCorrect === true);
-    if (trueDistractor && typeof trueDistractor.optionIndex === 'number') {
-      if (trueDistractor.optionIndex >= 0 && trueDistractor.optionIndex < rawOptions.length) {
-        return trueDistractor.optionIndex;
-      }
-    }
-  }
-
-  // Priority 4: Check correctIndex number field
-  if (typeof json.correctIndex === 'number' && Number.isInteger(json.correctIndex)) {
-    if (json.correctIndex >= 0 && json.correctIndex < rawOptions.length) {
-      return json.correctIndex;
-    }
-    if (json.correctIndex >= 1 && json.correctIndex <= rawOptions.length) {
-      return json.correctIndex - 1;
-    }
-  }
-
-  // Priority 5: Fallback search for any symbol in rationale
-  for (const [sym, idx] of Object.entries(SYMBOL_TO_INDEX)) {
-    if (ratStr.includes(`${sym}번`) || ratStr.includes(`${sym}가`) || ratStr.includes(`${sym}이`)) {
-      return idx;
-    }
-  }
-
-  return 0;
-}
-
-// Helper D3: Deterministic option shuffle with clean symbol alignment & correct index parsing
-function shuffleTransformOptions(data: any, targetQuestionType: string) {
-  const rawOptions: string[] = Array.isArray(data.options) && data.options.length === 5
-    ? data.options
-    : ['option 1', 'option 2', 'option 3', 'option 4', 'option 5'];
-
-  const originalCorrectIdx = parseAnswerIndex(data, rawOptions);
-  const cleanedOptions = rawOptions.map(cleanOptionTextHelper);
-
-  const POSITIONAL = ['어법 판단', '어휘 적절성', '문장 삽입'];
-  
-  if (POSITIONAL.includes(targetQuestionType)) {
-    const formattedOptions = cleanedOptions.map((opt, i) => `${INDEX_TO_SYMBOL[i]} ${opt}`);
-    const updatedDistractors = Array.isArray(data.distractorAnalysis)
-      ? data.distractorAnalysis.map((d: any, idx: number) => ({
-          ...d,
-          optionIndex: idx,
-          isCorrect: idx === originalCorrectIdx,
-        }))
-      : undefined;
-
-    return {
-      ...data,
-      options: formattedOptions,
-      correctIndex: originalCorrectIdx,
-      answer: String(originalCorrectIdx + 1),
-      ...(updatedDistractors ? { distractorAnalysis: updatedDistractors } : {}),
+      syntaxHighlights: [
+        "Therefore/Consequently 등 결론 도출 부사를 활용한 빈칸 추론",
+        "지문 본문의 핵심 어귀 패러프레이징"
+      ]
     };
   }
 
-  const n = cleanedOptions.length;
-  const order = [...Array(n).keys()];
-  for (let i = n - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [order[i], order[j]] = [order[j], order[i]];
+  function validateAndFixTransformItem(data: any, originalPassage: string, targetQuestionType: string) {
+    let modPassage = String(data.modifiedPassage || data.passage || originalPassage || '');
+    const sentences = (originalPassage || modPassage)
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    // 1. Validate & Fix Sentence Insertion (문장 삽입)
+    if (targetQuestionType === '문장 삽입') {
+      const hasGivenSentenceHeader = /\[\s*(?:주어진\s*문장|주어진문장|Given\s*Sentence)\s*\]/i.test(modPassage);
+      if (!hasGivenSentenceHeader) {
+        let insertedSentence = data.insertedSentence || data.targetSentence || data.givenSentence || '';
+        if (!insertedSentence && sentences.length > 2) {
+          insertedSentence = sentences[1];
+        }
+        if (!insertedSentence) {
+          insertedSentence = 'This crucial insight highlights the dynamic relationship between variables.';
+        }
+
+        let formattedBody = modPassage;
+        if (!/\(\s*[①②③④⑤1-5]\s*\)/.test(modPassage)) {
+          const remaining = sentences.filter(s => s !== insertedSentence);
+          formattedBody = '';
+          remaining.forEach((s, idx) => {
+            const numTag = idx < 5 ? ` ( ${INDEX_TO_SYMBOL[idx]} ) ` : ' ';
+            formattedBody += s + numTag;
+          });
+        }
+
+        modPassage = `[ 주어진 문장 ]\n"${insertedSentence.replace(/^"|"$/g, '')}"\n\n${formattedBody.trim()}`;
+      }
+    }
+
+    // 2. Validate & Fix Summary Completion (요약문 완성)
+    if (targetQuestionType === '요약문 완성') {
+      const hasSummaryHeader = /\[\s*(?:요약문|Summary)\s*\]/i.test(modPassage);
+      if (!hasSummaryHeader) {
+        modPassage = `${modPassage.trim()}\n\n[ 요약문 ]\nWhile the passage underscores how key factors (A) [___________] the broader outcomes, it ultimately suggests that researchers must (B) [___________] these elements for holistic understanding.`;
+      }
+    }
+
+    // 3. Validate & Fix Blank Inference (빈칸 추론)
+    if (targetQuestionType === '빈칸 추론') {
+      const hasBlank = /______+|\[___________\]|\(\s*_____\s*\)/.test(modPassage);
+      if (!hasBlank) {
+        modPassage = `${modPassage.trim()}\n\nTherefore, [___________].`;
+      }
+    }
+
+    const dataWithFixedPassage = {
+      ...data,
+      modifiedPassage: modPassage,
+    };
+
+    return shuffleTransformOptions(dataWithFixedPassage, targetQuestionType);
   }
 
-  const newCorrectIdx = order.indexOf(originalCorrectIdx);
-  const shuffledCleaned = order.map(i => cleanedOptions[i]);
-  const formattedOptions = shuffledCleaned.map((opt, i) => `${INDEX_TO_SYMBOL[i]} ${opt}`);
+  // S2 Item Bank Cache Storage Layer
+  const itemBankCacheServer = new Map<string, any>();
 
-  let updatedDistractors = undefined;
-  if (Array.isArray(data.distractorAnalysis) && data.distractorAnalysis.length === 5) {
-    updatedDistractors = order.map((origIdx, newIdx) => {
-      const origDistractor = data.distractorAnalysis[origIdx] || {};
-      return {
-        ...origDistractor,
-        optionIndex: newIdx,
-        isCorrect: newIdx === newCorrectIdx,
-      };
-    });
-  }
+  // 2. CSAT Transformed Question Generator (with S2 Item Bank Caching)
+  app.post('/api/gemini/transform', async (req, res) => {
+    const invalidError = validateRequestBody(req.body, { checkType: true });
+    if (invalidError) {
+      return res.status(400).json({ success: false, error: invalidError });
+    }
 
-  return {
-    ...data,
-    options: formattedOptions,
-    correctIndex: newCorrectIdx,
-    answer: String(newCorrectIdx + 1),
-    ...(updatedDistractors ? { distractorAnalysis: updatedDistractors } : {}),
-  };
-}
+    const { passage, lesson, itemNo, targetQuestionType = '빈칸 추론', difficulty = '수능 표준', customApiKey } = req.body;
 
-// S2 Item Bank Cache Storage Layer
-const itemBankCacheServer = new Map<string, any>();
+    // S2 Item Bank Lookup
+    const cacheKey = `${lesson || 'EBS'}_${itemNo || '지문'}_${targetQuestionType}_${difficulty}`;
+    if (itemBankCacheServer.has(cacheKey)) {
+      const cachedItem = itemBankCacheServer.get(cacheKey);
+      const verifiedItem = validateAndFixTransformItem(cachedItem, passage, targetQuestionType);
+      itemBankCacheServer.set(cacheKey, verifiedItem);
+      console.log(`[Server Item Bank Hit Verified]: 0ms response for ${cacheKey}`);
+      return res.json({ success: true, data: verifiedItem, cached: true, itemBankHit: true });
+    }
+    try {
+      const ai = getGenAIClient(customApiKey);
 
-// 2. CSAT Transformed Question Generator (with S2 Item Bank Caching)
-app.post('/api/gemini/transform', async (req, res) => {
-  const invalidError = validateRequestBody(req.body, { checkType: true });
-  if (invalidError) {
-    return res.status(400).json({ success: false, error: invalidError });
-  }
-
-  const { passage, lesson, itemNo, targetQuestionType = '빈칸 추론', difficulty = '수능 표준', customApiKey } = req.body;
-
-  // S2 Item Bank Lookup
-  const cacheKey = `${lesson || 'EBS'}_${itemNo || '지문'}_${targetQuestionType}_${difficulty}`;
-  if (itemBankCacheServer.has(cacheKey)) {
-    const cachedItem = itemBankCacheServer.get(cacheKey);
-    const verifiedItem = shuffleTransformOptions(cachedItem, targetQuestionType);
-    itemBankCacheServer.set(cacheKey, verifiedItem);
-    console.log(`[Server Item Bank Hit Verified]: 0ms response for ${cacheKey}`);
-    return res.json({ success: true, data: verifiedItem, cached: true, itemBankHit: true });
-  }
-  try {
-    const ai = getGenAIClient(customApiKey);
-
-    const systemPrompt = `You are an expert Korean CSAT (수능) English Exam Creator. Create an authentic, highly sophisticated CSAT-style transformed question for the given EBS passage.
+      const systemPrompt = `You are an expert Korean CSAT (수능) English Exam Creator. Create an authentic, highly sophisticated CSAT-style transformed question for the given EBS passage.
 Requested Question Type: "${targetQuestionType}".
 Difficulty Level: "${difficulty}".
 
 CRITICAL MANDATE:
 You MUST use the exact full English passage provided in the user prompt as the base for 'modifiedPassage'.
 Do NOT substitute or alter the passage with generic text or different topics.
-Keep the original English text 100% intact except for inserting the required question markings ([___________], ① <u>word</u>, [ 주어진 문장 ], etc.) according to the rules below:
+Keep the original English text 100% intact except for inserting the required question markings according to the rules below:
 
 CRITICAL QUESTION TYPE FORMATTING RULES:
 1. "빈칸 추론":
@@ -761,11 +684,10 @@ CRITICAL QUESTION TYPE FORMATTING RULES:
 
 2. "어법 판단":
    - question: "[EBS ...] 다음 글의 밑줄 친 부분 중, 어법상 틀린 것은?"
-   - modifiedPassage: Keep the exact original passage, marking 5 numbered grammar points directly inside the original text as ① <u>word</u>, ② <u>word</u>, ③ <u>word</u>, ④ <u>word</u>, ⑤ <u>word</u> (where ONE is grammatically incorrect).
+   - modifiedPassage: Embed 5 underlined numbered tokens into the passage: "① <u>word1</u>", "② <u>word2</u>", "③ <u>word3</u>", "④ <u>word4</u>", "⑤ <u>word5</u>". Exactly ONE of these 5 underlines MUST contain an authentic CSAT syntax error.
    - options: ["① <u>word1</u>", "② <u>word2</u>", "③ <u>word3</u>", "④ <u>word4</u>", "⑤ <u>word5</u>"].
 
 3. "문장 삽입":
-   - question: "[EBS ...] 글의 흐름으로 보아, 주어진 문장이 들어가지에 가장 적절한 곳은?"
    - modifiedPassage: "[ 주어진 문장 ]\n<Extracted/Paraphrased Sentence from the passage>\n\n<Original Passage text with ①, ②, ③, ④, ⑤ inserted at logical sentence boundaries>".
    - options: ["①", "②", "③", "④", "⑤"].
 

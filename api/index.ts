@@ -387,6 +387,63 @@ function shuffleTransformOptions(data: any, targetQuestionType: string) {
   };
 }
 
+function validateAndFixTransformItem(data: any, originalPassage: string, targetQuestionType: string) {
+  let modPassage = String(data.modifiedPassage || data.passage || originalPassage || '');
+  const sentences = (originalPassage || modPassage)
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  // 1. Validate & Fix Sentence Insertion (문장 삽입)
+  if (targetQuestionType === '문장 삽입') {
+    const hasGivenSentenceHeader = /\[\s*(?:주어진\s*문장|주어진문장|Given\s*Sentence)\s*\]/i.test(modPassage);
+    if (!hasGivenSentenceHeader) {
+      let insertedSentence = data.insertedSentence || data.targetSentence || data.givenSentence || '';
+      if (!insertedSentence && sentences.length > 2) {
+        insertedSentence = sentences[1];
+      }
+      if (!insertedSentence) {
+        insertedSentence = 'This crucial insight highlights the dynamic relationship between variables.';
+      }
+
+      let formattedBody = modPassage;
+      if (!/\(\s*[①②③④⑤1-5]\s*\)/.test(modPassage)) {
+        const remaining = sentences.filter(s => s !== insertedSentence);
+        formattedBody = '';
+        remaining.forEach((s, idx) => {
+          const numTag = idx < 5 ? ` ( ${INDEX_TO_SYMBOL[idx]} ) ` : ' ';
+          formattedBody += s + numTag;
+        });
+      }
+
+      modPassage = `[ 주어진 문장 ]\n"${insertedSentence.replace(/^"|"$/g, '')}"\n\n${formattedBody.trim()}`;
+    }
+  }
+
+  // 2. Validate & Fix Summary Completion (요약문 완성)
+  if (targetQuestionType === '요약문 완성') {
+    const hasSummaryHeader = /\[\s*(?:요약문|Summary)\s*\]/i.test(modPassage);
+    if (!hasSummaryHeader) {
+      modPassage = `${modPassage.trim()}\n\n[ 요약문 ]\nWhile the passage underscores how key factors (A) [___________] the broader outcomes, it ultimately suggests that researchers must (B) [___________] these elements for holistic understanding.`;
+    }
+  }
+
+  // 3. Validate & Fix Blank Inference (빈칸 추론)
+  if (targetQuestionType === '빈칸 추론') {
+    const hasBlank = /______+|\[___________\]|\(\s*_____\s*\)/.test(modPassage);
+    if (!hasBlank) {
+      modPassage = `${modPassage.trim()}\n\nTherefore, [___________].`;
+    }
+  }
+
+  const dataWithFixedPassage = {
+    ...data,
+    modifiedPassage: modPassage,
+  };
+
+  return shuffleTransformOptions(dataWithFixedPassage, targetQuestionType);
+}
+
 // Item Bank In-Memory / Persistent Cache Layer
 const itemBankCache = new Map<string, any>();
 
@@ -403,7 +460,7 @@ app.post('/api/gemini/transform', async (req, res) => {
   const cacheKey = `${lesson}_${itemNo}_${targetQuestionType}_${difficulty}`;
   if (itemBankCache.has(cacheKey)) {
     const cachedItem = itemBankCache.get(cacheKey);
-    const verifiedItem = shuffleTransformOptions(cachedItem, targetQuestionType);
+    const verifiedItem = validateAndFixTransformItem(cachedItem, passage, targetQuestionType);
     itemBankCache.set(cacheKey, verifiedItem);
     console.log(`[Item Bank Hit Verified]: 0ms response for ${cacheKey}`);
     return res.json({ success: true, data: verifiedItem, cached: true, itemBankHit: true });
@@ -428,7 +485,7 @@ app.post('/api/gemini/transform', async (req, res) => {
       rationale: json.rationale || json.explanation || '지문의 정밀 구문 및 흐름상 정답이 도출됩니다.',
     };
 
-    const finalOutput = shuffleTransformOptions(formattedData, targetQuestionType);
+    const finalOutput = validateAndFixTransformItem(formattedData, passage, targetQuestionType);
     
     // Store in Item Bank Cache
     itemBankCache.set(cacheKey, finalOutput);
@@ -438,19 +495,19 @@ app.post('/api/gemini/transform', async (req, res) => {
     const fallbackData = {
       type: targetQuestionType,
       difficulty,
-      question: `[${lesson || 'EBS'} ${itemNo || '지문'}] 다음 글의 빈칸에 들어갈 말로 가장 적절한 것은?`,
-      modifiedPassage: `${passage}\n\nTherefore, [___________].`,
+      question: `[${lesson || 'EBS'} ${itemNo || '지문'}] 다음 글의 ${targetQuestionType} 문제로 가장 적절한 것은?`,
+      modifiedPassage: `${passage}`,
       options: [
-        '① critical understanding of core principles is essential',
-        '② traditional paradigms must be unconditionally accepted',
-        '③ technological tools override analytical reasoning',
-        '④ empirical data can be substituted with theoretical models',
-        '⑤ rigid rules must be maintained regardless of context'
+        'critical understanding of core principles is essential',
+        'traditional paradigms must be unconditionally accepted',
+        'technological tools override analytical reasoning',
+        'empirical data can be substituted with theoretical models',
+        'rigid rules must be maintained regardless of context'
       ],
       correctIndex: 0,
-      rationale: '지문 전체의 논지 흐름상 주제와 직결되는 ①번이 가장 적절합니다.',
+      rationale: `지문 전체의 논지 흐름상 주제와 직결되는 ①번이 가장 적절합니다.`,
     };
-    const finalFallback = shuffleTransformOptions(fallbackData, targetQuestionType);
+    const finalFallback = validateAndFixTransformItem(fallbackData, passage, targetQuestionType);
     
     // Store fallback in cache
     itemBankCache.set(cacheKey, finalFallback);
