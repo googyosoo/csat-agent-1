@@ -78,7 +78,8 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
   };
 
   const cleanOptionText = (rawOpt: string) => {
-    return rawOpt.replace(/<[^>]*>/g, '');
+    if (!rawOpt) return '';
+    return rawOpt.replace(/<[^>]*>/g, '').replace(/^[①②③④⑤12345][\.\)]?\s*/, '').trim();
   };
 
   return (
@@ -264,7 +265,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
                           ? 'bg-rose-500 text-white'
                           : 'bg-slate-800 text-slate-300'
                       }`}>
-                        {idx + 1}
+                        {['①', '②', '③', '④', '⑤'][idx] || (idx + 1)}
                       </span>
                       <span className="leading-snug">{cleanOptionText(opt)}</span>
                     </span>

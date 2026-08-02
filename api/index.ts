@@ -254,28 +254,104 @@ Answer concisely in Korean teacher tone.`;
   }
 });
 
-// Helper D3: Deterministic option shuffle to remove 1st choice answer bias
+const SYMBOL_TO_INDEX: Record<string, number> = {
+  '①': 0, '②': 1, '③': 2, '④': 3, '⑤': 4,
+  '1': 0, '2': 1, '3': 2, '4': 3, '5': 4,
+};
+
+const INDEX_TO_SYMBOL = ['①', '②', '③', '④', '⑤'];
+
+function cleanOptionTextHelper(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw.replace(/^[①②③④⑤12345][\.\)]?\s*/, '').trim();
+}
+
+function parseAnswerIndex(json: any, rawOptions: string[]): number {
+  if (typeof json.correctIndex === 'number' && Number.isInteger(json.correctIndex)) {
+    if (json.correctIndex >= 0 && json.correctIndex < rawOptions.length) {
+      return json.correctIndex;
+    }
+    if (json.correctIndex >= 1 && json.correctIndex <= rawOptions.length) {
+      return json.correctIndex - 1;
+    }
+  }
+
+  const ansStr = String(json.answer || json.correctAnswer || json.solution || '');
+  for (const [sym, idx] of Object.entries(SYMBOL_TO_INDEX)) {
+    if (ansStr.includes(sym)) {
+      return idx;
+    }
+  }
+
+  const ratStr = String(json.rationale || json.explanation || '');
+  for (const [sym, idx] of Object.entries(SYMBOL_TO_INDEX)) {
+    if (ratStr.includes(`${sym}번`) || ratStr.includes(`${sym}가`) || ratStr.includes(`${sym}이`) || ratStr.includes(`${sym} `)) {
+      return idx;
+    }
+  }
+
+  return 0;
+}
+
+// Helper D3: Deterministic option shuffle with clean symbol alignment & correct index parsing
 function shuffleTransformOptions(data: any, targetQuestionType: string) {
+  const rawOptions: string[] = Array.isArray(data.options) && data.options.length === 5
+    ? data.options
+    : ['option 1', 'option 2', 'option 3', 'option 4', 'option 5'];
+
+  const originalCorrectIdx = parseAnswerIndex(data, rawOptions);
+  const cleanedOptions = rawOptions.map(cleanOptionTextHelper);
+
   const POSITIONAL = ['어법 판단', '어휘 적절성', '문장 삽입'];
-  if (POSITIONAL.includes(targetQuestionType)) return data;
+  
+  if (POSITIONAL.includes(targetQuestionType)) {
+    const formattedOptions = cleanedOptions.map((opt, i) => `${INDEX_TO_SYMBOL[i]} ${opt}`);
+    const updatedDistractors = Array.isArray(data.distractorAnalysis)
+      ? data.distractorAnalysis.map((d: any, idx: number) => ({
+          ...d,
+          optionIndex: idx,
+          isCorrect: idx === originalCorrectIdx,
+        }))
+      : undefined;
 
-  const n = data.options?.length ?? 0;
-  if (n < 2) return data;
+    return {
+      ...data,
+      options: formattedOptions,
+      correctIndex: originalCorrectIdx,
+      answer: String(originalCorrectIdx + 1),
+      ...(updatedDistractors ? { distractorAnalysis: updatedDistractors } : {}),
+    };
+  }
 
-  const correct = typeof data.correctIndex === 'number' ? data.correctIndex : (parseInt(data.answer || '1', 10) - 1);
-  if (!Number.isInteger(correct) || correct < 0 || correct >= n) return data;
-
+  const n = cleanedOptions.length;
   const order = [...Array(n).keys()];
   for (let i = n - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
   }
-  const newIdx = order.indexOf(correct);
+
+  const newCorrectIdx = order.indexOf(originalCorrectIdx);
+  const shuffledCleaned = order.map(i => cleanedOptions[i]);
+  const formattedOptions = shuffledCleaned.map((opt, i) => `${INDEX_TO_SYMBOL[i]} ${opt}`);
+
+  let updatedDistractors = undefined;
+  if (Array.isArray(data.distractorAnalysis) && data.distractorAnalysis.length === 5) {
+    updatedDistractors = order.map((origIdx, newIdx) => {
+      const origDistractor = data.distractorAnalysis[origIdx] || {};
+      return {
+        ...origDistractor,
+        optionIndex: newIdx,
+        isCorrect: newIdx === newCorrectIdx,
+      };
+    });
+  }
+
   return {
     ...data,
-    options: order.map(i => data.options[i]),
-    correctIndex: newIdx,
-    answer: String(newIdx + 1),
+    options: formattedOptions,
+    correctIndex: newCorrectIdx,
+    answer: String(newCorrectIdx + 1),
+    ...(updatedDistractors ? { distractorAnalysis: updatedDistractors } : {}),
   };
 }
 
