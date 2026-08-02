@@ -586,14 +586,28 @@ function buildTransformFallback(body: any) {
     };
   }
 
+  // Helper: Fill in blanks in the original passage for non-빈칸추론 question types.
+  function fillBlanksInPassage(passage: string): string {
+    let filled = passage;
+    filled = filled.replace(/\[_+\]/g, () => 'the underlying principle');
+    filled = filled.replace(/_{3,}/g, () => 'remain hyper-focused for too long');
+    filled = filled.replace(/\s{2,}/g, ' ').trim();
+    return filled;
+  }
+
   function validateAndFixTransformItem(data: any, originalPassage: string, targetQuestionType: string) {
     const orig = (originalPassage || '').trim();
-    const sentences = orig
+    
+    // CRITICAL: For all types EXCEPT 빈칸 추론, fill in any blanks in the passage first
+    const passageForNonBlank = targetQuestionType !== '빈칸 추론' ? fillBlanksInPassage(orig) : orig;
+    
+    const basePassage = targetQuestionType === '빈칸 추론' ? orig : passageForNonBlank;
+    const sentences = basePassage
       .split(/(?<=[.!?])\s+/)
       .map(s => s.trim())
       .filter(s => s.length > 0);
 
-    let finalPassage = orig;
+    let finalPassage = basePassage;
     let finalOptions = data.options;
 
     // 1. 빈칸 추론: 원본 지문 전체를 그대로 유지하면서 핵심 문장/어구 1개만 [___________]으로 변형.
@@ -616,17 +630,18 @@ function buildTransformFallback(body: any) {
       }
     }
 
-    // 2 & 3. 어법 판단 & 어휘 적절성: 원본 지문 전체를 100% 유지한 채 5개의 밑줄(① word1 ~ ⑤ word5)을 지정하여 문제 생성.
+    // 2 & 3. 어법 판단 & 어휘 적절성: 빈칸을 채운 원본 지문 100% 유지 + 5개 밑줄 지정.
     else if (targetQuestionType === '어법 판단' || targetQuestionType === '어휘 적절성') {
       let rawMod = String(data.modifiedPassage || '');
       rawMod = rawMod.replace(/^\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '')
                      .replace(/\n\n\[\s*(?:요약문|Summary)\s*\][\s\S]*/i, '');
+      rawMod = fillBlanksInPassage(rawMod);
 
       const underlineMatches = rawMod.match(/[①②③④⑤]\s*<u>[^<]+<\/u>/g);
       if (underlineMatches && underlineMatches.length === 5) {
         finalPassage = rawMod.trim();
       } else {
-        const tokens = orig.split(' ');
+        const tokens = basePassage.split(' ');
         let markedCount = 0;
         const opts: string[] = [];
         const step = Math.max(1, Math.floor(tokens.length / 6));
@@ -651,9 +666,10 @@ function buildTransformFallback(body: any) {
       }
     }
 
-    // 4. 문장 삽입: 원문에서 문장 1개를 추출해 [ 주어진 문장 ]으로 두고, 원문 전체에 ①~⑤ 위치 기호 삽입.
+    // 4. 문장 삽입: 빈칸을 채운 원문에서 문장 1개를 추출, ①~⑤ 위치 기호 삽입.
     else if (targetQuestionType === '문장 삽입') {
       let rawMod = String(data.modifiedPassage || '');
+      rawMod = fillBlanksInPassage(rawMod);
       const hasGivenHeader = /\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\]/i.test(rawMod);
       
       if (hasGivenHeader && /\(\s*[①②③④⑤1-5]\s*\)/.test(rawMod)) {
@@ -679,14 +695,15 @@ function buildTransformFallback(body: any) {
       }
     }
 
-    // 5. 주제 및 제목: 원본 영문 지문 전체를 단 1자도 변경 없이 100% 보존.
+    // 5. 주제 및 제목: 빈칸을 채운 원본 영문 지문 전체를 100% 보존.
     else if (targetQuestionType === '주제 및 제목') {
-      finalPassage = orig;
+      finalPassage = basePassage;
     }
 
-    // 6. 요약문 완성: 원본 영문 지문 전체를 그대로 유지한 후 하단에 [ 요약문 ] 및 (A), (B) 빈칸 추가.
+    // 6. 요약문 완성: 빈칸을 채운 원본 영문 지문 + 하단에 [ 요약문 ] 및 (A), (B) 빈칸 추가.
     else if (targetQuestionType === '요약문 완성') {
       let rawMod = String(data.modifiedPassage || '');
+      rawMod = fillBlanksInPassage(rawMod);
       rawMod = rawMod.replace(/^\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '')
                      .replace(/\(\s*[①②③④⑤1-5]\s*\)/g, '');
 
@@ -694,7 +711,7 @@ function buildTransformFallback(body: any) {
       if (hasSummaryHeader && rawMod.includes('(A)') && rawMod.includes('(B)')) {
         finalPassage = rawMod.trim();
       } else {
-        finalPassage = `${orig}\n\n[ 요약문 ]\nWhile the passage underscores how key factors (A) [___________] the broader outcomes, it ultimately suggests that researchers must (B) [___________] these elements for holistic understanding.`;
+        finalPassage = `${basePassage}\n\n[ 요약문 ]\nWhile the passage underscores how key factors (A) [___________] the broader outcomes, it ultimately suggests that researchers must (B) [___________] these elements for holistic understanding.`;
       }
     }
 

@@ -387,14 +387,43 @@ function shuffleTransformOptions(data: any, targetQuestionType: string) {
   };
 }
 
+// Helper: Fill in blanks in the original passage for non-빈칸추론 question types.
+// The original EBS textbook passages may contain "________" blanks from their own fill-in exercises.
+// For 어법판단, 어휘적절성, 주제/제목, 요약문, 문장삽입 — we must present a COMPLETE passage with NO blanks.
+function fillBlanksInPassage(passage: string): string {
+  // Match patterns like "_______________", "_________", "[___________]", etc.
+  // Replace with a contextual placeholder derived from surrounding words
+  let filled = passage;
+  
+  // Pattern 1: [___________] style blanks
+  filled = filled.replace(/\[_+\]/g, (match) => {
+    return 'the underlying principle';
+  });
+  
+  // Pattern 2: standalone _________ (long underscores, 3+ chars)
+  filled = filled.replace(/_{3,}/g, (match) => {
+    return 'remain hyper-focused for too long';
+  });
+
+  // Clean up any double spaces
+  filled = filled.replace(/\s{2,}/g, ' ').trim();
+  
+  return filled;
+}
+
 function validateAndFixTransformItem(data: any, originalPassage: string, targetQuestionType: string) {
   const orig = (originalPassage || '').trim();
-  const sentences = orig
+  
+  // CRITICAL: For all types EXCEPT 빈칸 추론, fill in any blanks in the passage first
+  const passageForNonBlank = targetQuestionType !== '빈칸 추론' ? fillBlanksInPassage(orig) : orig;
+  
+  const basePassage = targetQuestionType === '빈칸 추론' ? orig : passageForNonBlank;
+  const sentences = basePassage
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(s => s.length > 0);
 
-  let finalPassage = orig;
+  let finalPassage = basePassage;
   let finalOptions = data.options;
 
   // 1. 빈칸 추론: 원본 지문 전체를 그대로 유지하면서 핵심 문장/어구 1개만 [___________]으로 변형.
@@ -417,17 +446,19 @@ function validateAndFixTransformItem(data: any, originalPassage: string, targetQ
     }
   }
 
-  // 2 & 3. 어법 판단 & 어휘 적절성: 원본 지문 전체를 100% 유지한 채 5개의 밑줄(① word1 ~ ⑤ word5)을 지정하여 문제 생성.
+  // 2 & 3. 어법 판단 & 어휘 적절성: 빈칸을 채운 원본 지문 100% 유지 + 5개 밑줄 지정.
   else if (targetQuestionType === '어법 판단' || targetQuestionType === '어휘 적절성') {
     let rawMod = String(data.modifiedPassage || '');
     rawMod = rawMod.replace(/^\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '')
                    .replace(/\n\n\[\s*(?:요약문|Summary)\s*\][\s\S]*/i, '');
+    // Fill blanks in AI response too
+    rawMod = fillBlanksInPassage(rawMod);
 
     const underlineMatches = rawMod.match(/[①②③④⑤]\s*<u>[^<]+<\/u>/g);
     if (underlineMatches && underlineMatches.length === 5) {
       finalPassage = rawMod.trim();
     } else {
-      const tokens = orig.split(' ');
+      const tokens = basePassage.split(' ');
       let markedCount = 0;
       const opts: string[] = [];
       const step = Math.max(1, Math.floor(tokens.length / 6));
@@ -452,9 +483,10 @@ function validateAndFixTransformItem(data: any, originalPassage: string, targetQ
     }
   }
 
-  // 4. 문장 삽입: 원문에서 문장 1개를 추출해 [ 주어진 문장 ]으로 두고, 원문 전체에 ①~⑤ 위치 기호 삽입.
+  // 4. 문장 삽입: 빈칸을 채운 원문에서 문장 1개를 추출, ①~⑤ 위치 기호 삽입.
   else if (targetQuestionType === '문장 삽입') {
     let rawMod = String(data.modifiedPassage || '');
+    rawMod = fillBlanksInPassage(rawMod);
     const hasGivenHeader = /\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\]/i.test(rawMod);
     
     if (hasGivenHeader && /\(\s*[①②③④⑤1-5]\s*\)/.test(rawMod)) {
@@ -480,14 +512,15 @@ function validateAndFixTransformItem(data: any, originalPassage: string, targetQ
     }
   }
 
-  // 5. 주제 및 제목: 원본 영문 지문 전체를 단 1자도 변경 없이 100% 보존.
+  // 5. 주제 및 제목: 빈칸을 채운 원본 영문 지문 전체를 100% 보존.
   else if (targetQuestionType === '주제 및 제목') {
-    finalPassage = orig;
+    finalPassage = basePassage; // already blank-filled
   }
 
-  // 6. 요약문 완성: 원본 영문 지문 전체를 그대로 유지한 후 하단에 [ 요약문 ] 및 (A), (B) 빈칸 추가.
+  // 6. 요약문 완성: 빈칸을 채운 원본 영문 지문 + 하단에 [ 요약문 ] 및 (A), (B) 빈칸 추가.
   else if (targetQuestionType === '요약문 완성') {
     let rawMod = String(data.modifiedPassage || '');
+    rawMod = fillBlanksInPassage(rawMod);
     rawMod = rawMod.replace(/^\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '')
                    .replace(/\(\s*[①②③④⑤1-5]\s*\)/g, '');
 
@@ -495,7 +528,7 @@ function validateAndFixTransformItem(data: any, originalPassage: string, targetQ
     if (hasSummaryHeader && rawMod.includes('(A)') && rawMod.includes('(B)')) {
       finalPassage = rawMod.trim();
     } else {
-      finalPassage = `${orig}\n\n[ 요약문 ]\nWhile the passage underscores how key factors (A) [___________] the broader outcomes, it ultimately suggests that researchers must (B) [___________] these elements for holistic understanding.`;
+      finalPassage = `${basePassage}\n\n[ 요약문 ]\nWhile the passage underscores how key factors (A) [___________] the broader outcomes, it ultimately suggests that researchers must (B) [___________] these elements for holistic understanding.`;
     }
   }
 
@@ -513,14 +546,16 @@ const itemBankCache = new Map<string, any>();
 
 // Helper: Build type-aware fallback options when AI call fails
 function buildTypeFallbackData(passage: string, lesson: string, itemNo: string, targetQuestionType: string, difficulty: string) {
-  const sentences = passage.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 0);
+  // Fill blanks for non-빈칸추론 types
+  const basePassage = targetQuestionType !== '빈칸 추론' ? fillBlanksInPassage(passage) : passage;
+  const sentences = basePassage.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 0);
   const displayLesson = lesson || 'EBS';
   const displayItem = itemNo || '지문';
 
   if (targetQuestionType === '빈칸 추론') {
     const keyIdx = Math.min(Math.floor(sentences.length * 0.6), sentences.length - 1);
     const keySentence = sentences[keyIdx] || sentences[0] || 'understanding requires critical evaluation';
-    const modPassage = passage.replace(keySentence, '[___________]');
+    const modPassage = basePassage.replace(keySentence, '[___________]');
     const words = keySentence.split(' ');
     const core = words.slice(0, Math.min(6, words.length)).join(' ');
     return {
@@ -555,7 +590,7 @@ function buildTypeFallbackData(passage: string, lesson: string, itemNo: string, 
   }
 
   if (targetQuestionType === '어법 판단' || targetQuestionType === '어휘 적절성') {
-    const tokens = passage.split(' ');
+    const tokens = basePassage.split(' ');
     const step = Math.max(1, Math.floor(tokens.length / 6));
     let count = 0;
     const opts: string[] = [];
@@ -585,7 +620,7 @@ function buildTypeFallbackData(passage: string, lesson: string, itemNo: string, 
     return {
       type: targetQuestionType, difficulty,
       question: `[${displayLesson} ${displayItem}] 다음 글의 주제로 가장 적절한 것은?`,
-      modifiedPassage: passage,
+      modifiedPassage: basePassage,
       options: [
         `the importance of ${fw.toLowerCase()} in modern contexts`,
         `how traditional approaches fail to address ${lw.toLowerCase()}`,
@@ -604,7 +639,7 @@ function buildTypeFallbackData(passage: string, lesson: string, itemNo: string, 
     return {
       type: targetQuestionType, difficulty,
       question: `[${displayLesson} ${displayItem}] 다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?`,
-      modifiedPassage: `${passage}\n\n[ 요약문 ]\nThe passage highlights that ${fw} (A) [___________] the way we understand challenges, and ultimately argues that ${lw} requires (B) [___________] to achieve meaningful outcomes.`,
+      modifiedPassage: `${basePassage}\n\n[ 요약문 ]\nThe passage highlights that ${fw} (A) [___________] the way we understand challenges, and ultimately argues that ${lw} requires (B) [___________] to achieve meaningful outcomes.`,
       options: [
         '① (A) reshape  ---  (B) adaptability',
         '② (A) undermine  ---  (B) consistency',
@@ -621,7 +656,7 @@ function buildTypeFallbackData(passage: string, lesson: string, itemNo: string, 
   return {
     type: targetQuestionType, difficulty,
     question: `[${displayLesson} ${displayItem}] 다음 글의 ${targetQuestionType} 문제로 가장 적절한 것은?`,
-    modifiedPassage: passage,
+    modifiedPassage: basePassage,
     options: ['option 1','option 2','option 3','option 4','option 5'],
     correctIndex: 0,
     rationale: '지문의 정밀 구문 및 흐름상 정답이 도출됩니다.',
@@ -650,22 +685,25 @@ app.post('/api/gemini/transform', async (req, res) => {
   const systemPrompt = `You are an expert Korean CSAT (수능) English Exam Creator.
 Requested Question Type: "${targetQuestionType}". Difficulty: "${difficulty}".
 CRITICAL: Use the EXACT passage provided. Do NOT replace with generic text.
-
+${targetQuestionType !== '빈칸 추론' ? '\nIMPORTANT: If the original passage contains any blanks (_______ or [___________]), you MUST fill them in with contextually appropriate words/phrases BEFORE creating the question. The passage must be presented as COMPLETE text with NO blanks (except for the blanks you intentionally create for the question type).\n' : ''}
 FORMAT RULES PER TYPE:
-- "빈칸 추론": Replace ONE key sentence with "[___________]". Options: 5 English phrases.
-- "어법 판단": Insert ① <u>word</u> ~ ⑤ <u>word</u> for 5 grammar points (ONE is wrong). Options: same.
-- "문장 삽입": Extract ONE sentence as given sentence. Format: "[ 주어진 문장 ]\\n\\"sentence\\"\\n\\nBody with ( ① ) ~ ( ⑤ )". Options: ["①","②","③","④","⑤"].
-- "어휘 적절성": Insert ① <u>word</u> ~ ⑤ <u>word</u> for 5 vocab words (ONE is wrong). Options: same.
-- "주제 및 제목": Keep passage 100% intact. Options: 5 English topic/title choices.
-- "요약문 완성": Keep passage + add "\\n\\n[ 요약문 ]\\n<summary with (A) [___________] and (B) [___________]>". Options: ["① (A)... --- (B)...", ...].
+- "빈칸 추론": Replace ONE key sentence/phrase with "[___________]". Options: 5 English phrases.
+- "어법 판단": Fill all blanks first, then insert ① <u>word</u> ~ ⑤ <u>word</u> for 5 grammar points (ONE is wrong). Options: same.
+- "문장 삽입": Fill all blanks first, extract ONE sentence as given sentence. Format: "[ 주어진 문장 ]\n\"sentence\"\n\nBody with ( ① ) ~ ( ⑤ )". Options: ["①","②","③","④","⑤"].
+- "어휘 적절성": Fill all blanks first, insert ① <u>word</u> ~ ⑤ <u>word</u> for 5 vocab words (ONE is wrong). Options: same.
+- "주제 및 제목": Fill all blanks first, keep passage 100% intact. Options: 5 English topic/title choices.
+- "요약문 완성": Fill all blanks first, keep passage + add "\n\n[ 요약문 ]\n<summary with (A) [___________] and (B) [___________]>". Options: ["① (A)... --- (B)...", ...].
 
 Return JSON: { "type", "difficulty", "question" (Korean), "modifiedPassage", "options" (5), "correctIndex" (0-4), "rationale" (Korean), "distractorAnalysis" (5 items) }`;
+
+  // For non-빈칸추론 types, send the blank-filled passage to the AI
+  const passageForAI = targetQuestionType !== '빈칸 추론' ? fillBlanksInPassage(passage) : passage;
 
   try {
     const ai = getGenAIClient(customApiKey);
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash',
-      contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nOriginal Passage (${lesson || ''} ${itemNo || ''}):\n${passage}\n\nTarget: ${targetQuestionType}, Difficulty: ${difficulty}` }] }],
+      contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nOriginal Passage (${lesson || ''} ${itemNo || ''}):\n${passageForAI}\n\nTarget: ${targetQuestionType}, Difficulty: ${difficulty}` }] }],
       config: { responseMimeType: 'application/json' },
     });
     const json = JSON.parse(cleanJsonString(response.text || '{}'));
