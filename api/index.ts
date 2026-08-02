@@ -469,7 +469,7 @@ app.post('/api/gemini/transform', async (req, res) => {
   try {
     const ai = getGenAIClient(customApiKey);
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-1.5-flash',
       contents: [{ role: 'user', parts: [{ text: `Generate CSAT ${targetQuestionType} for passage: ${passage}` }] }],
       config: { responseMimeType: 'application/json' },
     });
