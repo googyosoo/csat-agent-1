@@ -388,81 +388,124 @@ function shuffleTransformOptions(data: any, targetQuestionType: string) {
 }
 
 function validateAndFixTransformItem(data: any, originalPassage: string, targetQuestionType: string) {
-  let modPassage = String(data.modifiedPassage || data.passage || originalPassage || '');
-
-  // CRITICAL FIX: If question type is NOT '문장 삽입', ALWAYS strip any leftover '[ 주어진 문장 ]' section at top!
-  if (targetQuestionType !== '문장 삽입') {
-    modPassage = modPassage.replace(/^\[\s*(?:주어진\s*문장|주어진문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '');
-    
-    // If not 어법 판단 or 어휘 적절성, strip any leftover ( ① ) ~ ( ⑤ ) tags from body
-    if (targetQuestionType !== '어법 판단' && targetQuestionType !== '어휘 적절성') {
-      modPassage = modPassage.replace(/\(\s*[①②③④⑤1-5]\s*\)/g, '').replace(/\s{2,}/g, ' ');
-    }
-  }
-
-  // If question type is NOT '요약문 완성', strip any leftover '[ 요약문 ]' section at bottom!
-  if (targetQuestionType !== '요약문 완성') {
-    modPassage = modPassage.replace(/\n\n\[\s*(?:요약문|Summary)\s*\][\s\S]*/i, '');
-  }
-
-  const sentences = (originalPassage || modPassage)
+  const orig = (originalPassage || '').trim();
+  const sentences = orig
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(s => s.length > 0);
 
-  // 1. Validate & Fix Sentence Insertion (문장 삽입)
-  if (targetQuestionType === '문장 삽입') {
-    const hasGivenSentenceHeader = /\[\s*(?:주어진\s*문장|주어진문장|Given\s*Sentence)\s*\]/i.test(modPassage);
-    if (!hasGivenSentenceHeader) {
+  let finalPassage = orig;
+  let finalOptions = data.options;
+
+  // 1. 빈칸 추론: 원본 지문 전체를 그대로 유지하면서 핵심 문장/어구 1개만 [___________]으로 변형.
+  if (targetQuestionType === '빈칸 추론') {
+    let rawMod = String(data.modifiedPassage || '');
+    rawMod = rawMod.replace(/^\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '')
+                   .replace(/\(\s*[①②③④⑤1-5]\s*\)/g, '')
+                   .replace(/\n\n\[\s*(?:요약문|Summary)\s*\][\s\S]*/i, '');
+
+    const hasBlank = /______+|\[___________\]|\(\s*_____\s*\)/.test(rawMod);
+    if (hasBlank && rawMod.length > 50) {
+      finalPassage = rawMod.trim();
+    } else {
+      const lastSentence = sentences.length > 0 ? sentences[sentences.length - 1] : orig;
+      if (orig.includes(lastSentence)) {
+        finalPassage = orig.replace(lastSentence, 'Therefore, [___________].');
+      } else {
+        finalPassage = `${orig}\n\nTherefore, [___________].`;
+      }
+    }
+  }
+
+  // 2 & 3. 어법 판단 & 어휘 적절성: 원본 지문 전체를 100% 유지한 채 5개의 밑줄(① word1 ~ ⑤ word5)을 지정하여 문제 생성.
+  else if (targetQuestionType === '어법 판단' || targetQuestionType === '어휘 적절성') {
+    let rawMod = String(data.modifiedPassage || '');
+    rawMod = rawMod.replace(/^\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '')
+                   .replace(/\n\n\[\s*(?:요약문|Summary)\s*\][\s\S]*/i, '');
+
+    const underlineMatches = rawMod.match(/[①②③④⑤]\s*<u>[^<]+<\/u>/g);
+    if (underlineMatches && underlineMatches.length === 5) {
+      finalPassage = rawMod.trim();
+    } else {
+      const tokens = orig.split(' ');
+      let markedCount = 0;
+      const opts: string[] = [];
+      const step = Math.max(1, Math.floor(tokens.length / 6));
+      
+      const modifiedTokens = tokens.map((token, idx) => {
+        if (markedCount < 5 && token.length >= 3 && idx > markedCount * step + 1) {
+          markedCount++;
+          const sym = INDEX_TO_SYMBOL[markedCount - 1];
+          const cleanWord = token.replace(/[^a-zA-Z]/g, '');
+          if (cleanWord) {
+            opts.push(`${sym} <u>${cleanWord}</u>`);
+            return token.replace(cleanWord, `${sym} <u>${cleanWord}</u>`);
+          }
+        }
+        return token;
+      });
+
+      finalPassage = modifiedTokens.join(' ');
+      if (opts.length === 5) {
+        finalOptions = opts;
+      }
+    }
+  }
+
+  // 4. 문장 삽입: 원문에서 문장 1개를 추출해 [ 주어진 문장 ]으로 두고, 원문 전체에 ①~⑤ 위치 기호 삽입.
+  else if (targetQuestionType === '문장 삽입') {
+    let rawMod = String(data.modifiedPassage || '');
+    const hasGivenHeader = /\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\]/i.test(rawMod);
+    
+    if (hasGivenHeader && /\(\s*[①②③④⑤1-5]\s*\)/.test(rawMod)) {
+      finalPassage = rawMod.trim();
+    } else {
       let insertedSentence = data.insertedSentence || data.targetSentence || data.givenSentence || '';
       if (!insertedSentence && sentences.length > 2) {
         insertedSentence = sentences[1];
       }
       if (!insertedSentence) {
-        insertedSentence = 'This crucial insight highlights the dynamic relationship between variables.';
+        insertedSentence = sentences[0] || 'This crucial insight highlights the dynamic relationship between variables.';
       }
 
-      let formattedBody = modPassage.replace(/^\[\s*(?:주어진\s*문장|주어진문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '');
-      if (!/\(\s*[①②③④⑤1-5]\s*\)/.test(formattedBody)) {
-        const remaining = sentences.filter(s => s !== insertedSentence);
-        formattedBody = '';
-        remaining.forEach((s, idx) => {
-          const numTag = idx < 5 ? ` ( ${INDEX_TO_SYMBOL[idx]} ) ` : ' ';
-          formattedBody += s + numTag;
-        });
-      }
+      const remaining = sentences.filter(s => s !== insertedSentence);
+      let bodyWithTags = '';
+      remaining.forEach((s, idx) => {
+        const tag = idx < 5 ? ` ( ${INDEX_TO_SYMBOL[idx]} ) ` : ' ';
+        bodyWithTags += s + tag;
+      });
 
-      modPassage = `[ 주어진 문장 ]\n"${insertedSentence.replace(/^"|"$/g, '')}"\n\n${formattedBody.trim()}`;
+      finalPassage = `[ 주어진 문장 ]\n"${insertedSentence.replace(/^"|"$/g, '')}"\n\n${bodyWithTags.trim()}`;
+      finalOptions = ['①', '②', '③', '④', '⑤'];
     }
   }
 
-  // 2. Validate & Fix Summary Completion (요약문 완성)
-  if (targetQuestionType === '요약문 완성') {
-    const hasSummaryHeader = /\[\s*(?:요약문|Summary)\s*\]/i.test(modPassage);
-    if (!hasSummaryHeader) {
-      modPassage = `${modPassage.trim()}\n\n[ 요약문 ]\nWhile the passage underscores how key factors (A) [___________] the broader outcomes, it ultimately suggests that researchers must (B) [___________] these elements for holistic understanding.`;
+  // 5. 주제 및 제목: 원본 영문 지문 전체를 단 1자도 변경 없이 100% 보존.
+  else if (targetQuestionType === '주제 및 제목') {
+    finalPassage = orig;
+  }
+
+  // 6. 요약문 완성: 원본 영문 지문 전체를 그대로 유지한 후 하단에 [ 요약문 ] 및 (A), (B) 빈칸 추가.
+  else if (targetQuestionType === '요약문 완성') {
+    let rawMod = String(data.modifiedPassage || '');
+    rawMod = rawMod.replace(/^\[\s*(?:주어진\s*문장|Given\s*Sentence)\s*\][\s\S]*?\n\n/i, '')
+                   .replace(/\(\s*[①②③④⑤1-5]\s*\)/g, '');
+
+    const hasSummaryHeader = /\[\s*(?:요약문|Summary)\s*\]/i.test(rawMod);
+    if (hasSummaryHeader && rawMod.includes('(A)') && rawMod.includes('(B)')) {
+      finalPassage = rawMod.trim();
+    } else {
+      finalPassage = `${orig}\n\n[ 요약문 ]\nWhile the passage underscores how key factors (A) [___________] the broader outcomes, it ultimately suggests that researchers must (B) [___________] these elements for holistic understanding.`;
     }
   }
 
-  // 3. Validate & Fix Blank Inference (빈칸 추론)
-  if (targetQuestionType === '빈칸 추론') {
-    const hasBlank = /______+|\[___________\]|\(\s*_____\s*\)/.test(modPassage);
-    if (!hasBlank) {
-      const lastSent = sentences[sentences.length - 1] || 'Therefore, this principle applies universally.';
-      if (modPassage.includes(lastSent)) {
-        modPassage = modPassage.replace(lastSent, `Therefore, [___________].`);
-      } else {
-        modPassage = `${modPassage.trim()}\n\nTherefore, [___________].`;
-      }
-    }
-  }
-
-  const dataWithFixedPassage = {
+  const updatedData = {
     ...data,
-    modifiedPassage: modPassage,
+    modifiedPassage: finalPassage,
+    options: finalOptions,
   };
 
-  return shuffleTransformOptions(dataWithFixedPassage, targetQuestionType);
+  return shuffleTransformOptions(updatedData, targetQuestionType);
 }
 
 // Item Bank In-Memory / Persistent Cache Layer
