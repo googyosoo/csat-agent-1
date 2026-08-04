@@ -161,7 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>어휘 & 구문 보관함</span>
           </button>
 
-          {/* Admin Dashboard Navigation */}
+          {/* Admin / Student Dashboard Navigation */}
           <button
             type="button"
             onClick={() => handleTabClick('admin')}
@@ -172,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
           >
             <i className="fa-solid fa-chart-line w-5 text-center text-purple-400"></i>
-            <span>학습 관리자 대시보드</span>
+            <span>{isAdminUser(authUser?.email) ? '학습 관리자 대시보드' : '내 개인 학습 대시보드'}</span>
           </button>
         </nav>
       </div>

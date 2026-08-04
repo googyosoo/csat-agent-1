@@ -4,6 +4,7 @@
 
 import { db } from './firebase';
 import { collection, doc, setDoc, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { safeFetchJson } from './api';
 
 export interface StudentActivity {
   id: string;
@@ -73,6 +74,19 @@ const INITIAL_SAMPLE_STUDENT: StudentActivity = {
 };
 
 /**
+ * Helper to sync student data to Central Server API
+ */
+function syncStudentToServer(student: StudentActivity): void {
+  try {
+    safeFetchJson('/api/analytics/sync-student', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(student),
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+/**
  * Get stored student activities from localStorage (or Firestore fallback)
  */
 export function getStoredStudentActivities(): StudentActivity[] {
@@ -91,22 +105,39 @@ export function getStoredStudentActivities(): StudentActivity[] {
 }
 
 /**
- * Async fetch student activities from Firebase Firestore with LocalStorage fallback
+ * Async fetch student activities with 3-tier fallback: Firestore -> Server API -> LocalStorage
  */
 export async function fetchFirestoreStudentActivities(): Promise<StudentActivity[]> {
+  // 1. Try Firestore
   try {
-    const querySnapshot = await getDocs(collection(db, 'students'));
-    if (querySnapshot.empty) {
-      return getStoredStudentActivities();
+    const firestorePromise = getDocs(collection(db, 'students'));
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout')), 2000)
+    );
+    const querySnapshot = await Promise.race([firestorePromise, timeoutPromise]);
+    if (!querySnapshot.empty) {
+      const list: StudentActivity[] = [];
+      querySnapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as StudentActivity);
+      });
+      return list;
     }
-    const list: StudentActivity[] = [];
-    querySnapshot.forEach((docSnap) => {
-      list.push(docSnap.data() as StudentActivity);
-    });
-    return list;
   } catch (e) {
-    return getStoredStudentActivities();
+    console.warn('[fetchFirestoreStudentActivities] Firestore failed, trying Central Server API:', e);
   }
+
+  // 2. Try Central Server API
+  try {
+    const res = await safeFetchJson('/api/analytics/students');
+    if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+      return res.data;
+    }
+  } catch (e) {
+    console.warn('[fetchFirestoreStudentActivities] Server API failed, falling back to LocalStorage:', e);
+  }
+
+  // 3. Fallback to LocalStorage
+  return getStoredStudentActivities();
 }
 
 /**
@@ -123,22 +154,39 @@ export function getStoredSocraticSummaries(): SocraticSummary[] {
 }
 
 /**
- * Async fetch Socratic summaries from Firebase Firestore
+ * Async fetch Socratic summaries with 3-tier fallback: Firestore -> Server API -> LocalStorage
  */
 export async function fetchFirestoreSocraticSummaries(): Promise<SocraticSummary[]> {
+  // 1. Try Firestore
   try {
-    const querySnapshot = await getDocs(collection(db, 'socratic_logs'));
-    if (querySnapshot.empty) {
-      return getStoredSocraticSummaries();
+    const firestorePromise = getDocs(collection(db, 'socratic_logs'));
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout')), 2000)
+    );
+    const querySnapshot = await Promise.race([firestorePromise, timeoutPromise]);
+    if (!querySnapshot.empty) {
+      const list: SocraticSummary[] = [];
+      querySnapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as SocraticSummary);
+      });
+      return list;
     }
-    const list: SocraticSummary[] = [];
-    querySnapshot.forEach((docSnap) => {
-      list.push(docSnap.data() as SocraticSummary);
-    });
-    return list;
   } catch (e) {
-    return getStoredSocraticSummaries();
+    console.warn('[fetchFirestoreSocraticSummaries] Firestore failed, trying Central Server API:', e);
   }
+
+  // 2. Try Central Server API
+  try {
+    const res = await safeFetchJson('/api/analytics/socratic-logs');
+    if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+      return res.data;
+    }
+  } catch (e) {
+    console.warn('[fetchFirestoreSocraticSummaries] Server API failed, falling back to LocalStorage:', e);
+  }
+
+  // 3. Fallback to LocalStorage
+  return getStoredSocraticSummaries();
 }
 
 /**
@@ -192,7 +240,7 @@ function ensureStudentExists(emailInput?: string | null, nameInput?: string | nu
 }
 
 /**
- * Record user login event and save to Firestore & LocalStorage
+ * Record user login event and save to Firestore, Server API & LocalStorage
  */
 export function recordUserLogin(user: { email?: string | null; displayName?: string | null; photoURL?: string | null }): StudentActivity[] {
   const email = user?.email || 'student@simin.hs.kr';
@@ -204,12 +252,15 @@ export function recordUserLogin(user: { email?: string | null; displayName?: str
     students[idx].avatarUrl = user.photoURL;
   }
 
-  // LocalStorage save
+  // 1. LocalStorage save
   try {
     localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
   } catch (e) {}
 
-  // Firestore DB save (async background)
+  // 2. Central Server API save
+  syncStudentToServer(students[idx]);
+
+  // 3. Firestore DB save (async background)
   try {
     const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
     setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
@@ -219,7 +270,7 @@ export function recordUserLogin(user: { email?: string | null; displayName?: str
 }
 
 /**
- * Record Socratic tutor conversation event in Firestore & LocalStorage
+ * Record Socratic tutor conversation event in Firestore, Server API & LocalStorage
  */
 export function recordSocraticQuestion(data: {
   studentEmail?: string | null;
@@ -264,6 +315,15 @@ export function recordSocraticQuestion(data: {
     localStorage.setItem(STORAGE_KEY_SOCRATIC, JSON.stringify(summaries.slice(0, 50)));
   } catch (e) {}
 
+  // Central Server API save
+  try {
+    safeFetchJson('/api/analytics/socratic-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newLog),
+    }).catch(() => {});
+  } catch (e) {}
+
   // Firestore DB save
   try {
     setDoc(doc(db, 'socratic_logs', newLog.id), newLog).catch(() => {});
@@ -276,13 +336,14 @@ export function recordSocraticQuestion(data: {
 
   try {
     localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+    syncStudentToServer(students[idx]);
     const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
     setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
   } catch (e) {}
 }
 
 /**
- * Record transformed question generation event in Firestore & LocalStorage
+ * Record transformed question generation event in Firestore, Server API & LocalStorage
  */
 export function recordGeneratorUsage(studentEmail?: string | null, studentName?: string | null): void {
   const email = studentEmail || 'student@simin.hs.kr';
@@ -295,6 +356,7 @@ export function recordGeneratorUsage(studentEmail?: string | null, studentName?:
 
   try {
     localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+    syncStudentToServer(students[idx]);
     const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
     setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
   } catch (e) {}
@@ -313,7 +375,7 @@ export function clearAnalyticsData(): void {
 }
 
 /**
- * Record Student Passage Reflection in Firestore & LocalStorage
+ * Record Student Passage Reflection in Firestore, Server API & LocalStorage
  */
 export function recordStudentReflection(data: {
   studentEmail?: string | null;
@@ -353,6 +415,15 @@ export function recordStudentReflection(data: {
     localStorage.setItem(STORAGE_KEY_REFLECTIONS, JSON.stringify(reflections));
   } catch (e) {}
 
+  // Central Server API save
+  try {
+    safeFetchJson('/api/analytics/reflection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newReflection),
+    }).catch(() => {});
+  } catch (e) {}
+
   // Firestore DB save
   try {
     setDoc(doc(db, 'student_reflections', newReflection.id), newReflection).catch(() => {});
@@ -365,6 +436,7 @@ export function recordStudentReflection(data: {
 
   try {
     localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+    syncStudentToServer(students[idx]);
     const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
     setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
   } catch (e) {}
@@ -386,22 +458,39 @@ export function getStoredStudentReflections(): StudentReflection[] {
 }
 
 /**
- * Async fetch student reflections from Firebase Firestore with LocalStorage fallback
+ * Async fetch student reflections with 3-tier fallback: Firestore -> Server API -> LocalStorage
  */
 export async function fetchFirestoreStudentReflections(): Promise<StudentReflection[]> {
+  // 1. Try Firestore
   try {
-    const querySnapshot = await getDocs(collection(db, 'student_reflections'));
-    if (querySnapshot.empty) {
-      return getStoredStudentReflections();
+    const firestorePromise = getDocs(collection(db, 'student_reflections'));
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout')), 2000)
+    );
+    const querySnapshot = await Promise.race([firestorePromise, timeoutPromise]);
+    if (!querySnapshot.empty) {
+      const list: StudentReflection[] = [];
+      querySnapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as StudentReflection);
+      });
+      return list;
     }
-    const list: StudentReflection[] = [];
-    querySnapshot.forEach((docSnap) => {
-      list.push(docSnap.data() as StudentReflection);
-    });
-    return list;
   } catch (e) {
-    return getStoredStudentReflections();
+    console.warn('[fetchFirestoreStudentReflections] Firestore failed, trying Central Server API:', e);
   }
+
+  // 2. Try Central Server API
+  try {
+    const res = await safeFetchJson('/api/analytics/reflections');
+    if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+      return res.data;
+    }
+  } catch (e) {
+    console.warn('[fetchFirestoreStudentReflections] Server API failed, falling back to LocalStorage:', e);
+  }
+
+  // 3. Fallback to LocalStorage
+  return getStoredStudentReflections();
 }
 
 /**

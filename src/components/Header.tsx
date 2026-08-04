@@ -61,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'socratic', name: '소크라테스', icon: 'fa-brain' },
     { id: 'generator', name: '변형생성기', icon: 'fa-wand-magic-sparkles' },
     { id: 'vocab', name: '어휘보관함', icon: 'fa-layer-group' },
-    { id: 'admin', name: '대시보드', icon: 'fa-chart-line' },
+    { id: 'admin', name: isAdmin ? '관리자 대시보드' : '내 학습 대시보드', icon: 'fa-chart-line' },
   ];
 
   return (

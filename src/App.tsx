@@ -18,6 +18,8 @@ import { MyLearningTab } from './components/MyLearningTab';
 import { SUBJECTS } from './data/subjects';
 import { recordUserLogin } from './lib/analytics';
 
+import { StudentDashboardTab } from './components/StudentDashboardTab';
+
 export default function App() {
   const [dataset, setDataset] = useState<EBSPassage[]>(INITIAL_EBS_DATASET);
   const [selectedSubjectId, setSelectedSubjectId] = useState('jinro');
@@ -172,7 +174,23 @@ export default function App() {
             <GeneratorTab selectedPassage={selectedPassage} customApiKey={customApiKey} authUser={authUser} />
           )}
           {activeTab === 'vocab' && <VocabTab selectedPassage={selectedPassage} onSpeak={speakText} />}
-          {activeTab === 'admin' && <AdminDashboardTab authUser={authUser} />}
+          {activeTab === 'admin' && (
+            isAdmin ? (
+              <AdminDashboardTab authUser={authUser} />
+            ) : (
+              <StudentDashboardTab
+                authUser={authUser}
+                dataset={dataset}
+                onSelectPassage={(passageId) => {
+                  const found = dataset.find((p) => p.id === passageId);
+                  if (found) {
+                    setSelectedPassage(found);
+                    setActiveTab('library');
+                  }
+                }}
+              />
+            )
+          )}
         </div>
       </main>
 

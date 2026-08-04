@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { User } from '../lib/firebase';
 import { isAdminUser, ADMIN_EMAILS } from '../lib/adminAuth';
 import {
@@ -8,10 +8,39 @@ import {
   fetchFirestoreStudentActivities,
   fetchFirestoreSocraticSummaries,
   fetchFirestoreStudentReflections,
+  getStoredStudentActivities,
   calculateAnalyticsMetrics,
   clearAnalyticsData,
 } from '../lib/analytics';
 import { safeFetchJson } from '../lib/api';
+
+/* ──────── Error Boundary ──────── */
+interface EBState { hasError: boolean; error: Error | null }
+class DashboardErrorBoundary extends Component<{ children: ReactNode }, EBState> {
+  state: EBState = { hasError: false, error: null };
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('[AdminDashboard ErrorBoundary]', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="max-w-2xl mx-auto my-12 bg-slate-900 border border-rose-500/40 rounded-2xl p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-2xl mx-auto border border-rose-500/30">
+            <i className="fa-solid fa-triangle-exclamation"></i>
+          </div>
+          <h2 className="text-lg font-bold text-white">대시보드 렌더링 오류</h2>
+          <p className="text-xs text-slate-400">{this.state.error?.message || '알 수 없는 오류가 발생했습니다.'}</p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); }}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl"
+          >
+            다시 시도
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface AdminDashboardTabProps {
   authUser: User | null;
@@ -26,12 +55,14 @@ interface StudentReportResult {
   keyCompetencies: string[];
 }
 
-export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }) => {
+/* ──────── Main Dashboard (inner) ──────── */
+const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => {
   const [students, setStudents] = useState<StudentActivity[]>([]);
   const [socSummaries, setSocSummaries] = useState<SocraticSummary[]>([]);
   const [reflections, setReflections] = useState<StudentReflection[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<StudentActivity | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // AI Setek Generator State
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
@@ -41,12 +72,31 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
 
   // Load accumulated real data from Firestore DB (or LocalStorage fallback)
   const loadData = async () => {
-    const sList = await fetchFirestoreStudentActivities();
-    const socList = await fetchFirestoreSocraticSummaries();
-    const refList = await fetchFirestoreStudentReflections();
-    setStudents(sList);
-    setSocSummaries(socList);
-    setReflections(refList);
+    try {
+      console.log('[AdminDashboard] loadData started');
+      setIsLoading(true);
+      const [sList, socList, refList] = await Promise.allSettled([
+        fetchFirestoreStudentActivities(),
+        fetchFirestoreSocraticSummaries(),
+        fetchFirestoreStudentReflections(),
+      ]);
+      setStudents(sList.status === 'fulfilled' ? sList.value : getStoredStudentActivities());
+      setSocSummaries(socList.status === 'fulfilled' ? socList.value : []);
+      setReflections(refList.status === 'fulfilled' ? refList.value : []);
+      console.log('[AdminDashboard] loadData done', {
+        students: (sList.status === 'fulfilled' ? sList.value : []).length,
+        socratic: (socList.status === 'fulfilled' ? socList.value : []).length,
+        reflections: (refList.status === 'fulfilled' ? refList.value : []).length,
+      });
+    } catch (err) {
+      console.error('[AdminDashboard] loadData error:', err);
+      // Even on total failure, show empty state
+      setStudents(getStoredStudentActivities());
+      setSocSummaries([]);
+      setReflections([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -169,6 +219,24 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
     setSheetCopied(true);
     setTimeout(() => setSheetCopied(false), 3000);
   };
+
+  // Show loading indicator while data is being fetched
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto my-12 bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center space-y-4 shadow-2xl">
+        <div className="w-14 h-14 rounded-2xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center text-2xl mx-auto animate-bounce">
+          <i className="fa-solid fa-chart-line"></i>
+        </div>
+        <h2 className="text-base font-bold text-white">학습 관리자 대시보드 불러오는 중...</h2>
+        <p className="text-xs text-slate-400">Firestore 및 LocalStorage에서 학습 데이터를 조회하고 있습니다.</p>
+        <div className="flex items-center justify-center space-x-1">
+          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" style={{ animationDelay: '0.15s' }}></span>
+          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" style={{ animationDelay: '0.3s' }}></span>
+        </div>
+      </div>
+    );
+  }
 
   if (!hasAccess) {
     return (
@@ -691,3 +759,10 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
     </div>
   );
 };
+
+/* ──────── Exported Wrapper with Error Boundary ──────── */
+export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = (props) => (
+  <DashboardErrorBoundary>
+    <AdminDashboardInner {...props} />
+  </DashboardErrorBoundary>
+);

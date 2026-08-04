@@ -234,7 +234,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
             <div className="p-5 bg-slate-900 rounded-xl border border-amber-500/30 text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap shadow-inner">
               <div className="text-[10px] font-bold text-amber-400/90 uppercase tracking-wider mb-2 pb-1 border-b border-slate-800 flex items-center space-x-1">
                 <i className="fa-solid fa-pen-ruler"></i>
-                <span>[{generatedItem.type || targetQuestionType}] 변형 적용 지문</span>
+                <span>[{generatedItem.type || targetType}] 변형 적용 지문</span>
               </div>
               <div
                 dangerouslySetInnerHTML={{
