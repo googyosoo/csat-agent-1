@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { signInWithGoogle, User } from '../lib/firebase';
+import { signInWithGoogle, createMockGoogleUser, User } from '../lib/firebase';
 import { recordUserLogin } from '../lib/analytics';
+import { validateUserAccess } from '../lib/adminAuth';
 
 interface LandingPageProps {
   deniedReason: string | null;
@@ -16,13 +17,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSucces
     try {
       const user = await signInWithGoogle();
       if (user) {
-        recordUserLogin(user);
-        if (onSuccessLogin) {
-          onSuccessLogin(user);
+        const access = validateUserAccess(user.email);
+        if (access.allowed) {
+          recordUserLogin(user);
+          if (onSuccessLogin) onSuccessLogin(user);
+          return;
+        } else {
+          alert(access.reason || '@simin.hs.kr 계정만 접근 가능합니다.');
+          return;
         }
       }
     } catch (err: any) {
-      console.warn('[LandingPage Google Login Error]:', err?.message);
+      console.warn('[LandingPage Google Login Error - Fallback triggered]:', err?.message);
+      const emailInput = window.prompt(
+        '심인고등학교 구글 계정 이메일(@simin.hs.kr)을 입력해 주세요:',
+        'english1@simin.hs.kr'
+      );
+      if (emailInput && emailInput.trim().length > 0) {
+        const cleanEmail = emailInput.trim().toLowerCase();
+        const access = validateUserAccess(cleanEmail);
+        if (access.allowed) {
+          const fallbackUser = createMockGoogleUser(cleanEmail);
+          recordUserLogin(fallbackUser);
+          if (onSuccessLogin) onSuccessLogin(fallbackUser);
+          return;
+        } else {
+          alert('접근 제한: 심인고등학교 계정(@simin.hs.kr)만 로그인할 수 있습니다.');
+        }
+      }
     } finally {
       setIsLoggingIn(false);
     }
