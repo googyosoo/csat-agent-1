@@ -162,20 +162,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           {/* Admin Dashboard Navigation */}
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => handleTabClick('admin')}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-bold transition-all border border-purple-500/30 ${
-                activeTab === 'admin'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-950/50'
-                  : 'text-purple-300 hover:bg-purple-950/40 hover:text-purple-200'
-              }`}
-            >
-              <i className="fa-solid fa-chart-line w-5 text-center text-purple-400"></i>
-              <span>학습 관리자 대시보드</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => handleTabClick('admin')}
+            className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-bold transition-all border border-purple-500/30 ${
+              activeTab === 'admin'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-950/50'
+                : 'text-purple-300 hover:bg-purple-950/40 hover:text-purple-200'
+            }`}
+          >
+            <i className="fa-solid fa-chart-line w-5 text-center text-purple-400"></i>
+            <span>학습 관리자 대시보드</span>
+          </button>
         </nav>
       </div>
 

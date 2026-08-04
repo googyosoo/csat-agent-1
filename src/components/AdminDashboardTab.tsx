@@ -110,15 +110,15 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
       return;
     }
 
-    const headers = ['이름', '이메일', '총 체류시간(분)', '변형문제 생성/풀이(건)', '소크라테스 질의(건)', '성찰일지 작성(건)', '최근 학습 일시'];
+    const headers = ['이름', '이메일', '총 체류시간(분)', '변형문제 생성/풀이(건)', '소크라테스 질의(건)', '학습완료 지문(건)', '최근 학습 일시'];
     const rows = students.map((s) => [
       `"${(s.name || '').replace(/"/g, '""')}"`,
       `"${(s.email || '').replace(/"/g, '""')}"`,
       s.totalDwellTimeMinutes || 0,
-      s.generatedQuestionsCount || 0,
-      s.socraticConversationsCount || 0,
-      s.reflectionCount || 0,
-      `"${s.lastActiveTime || ''}"`
+      s.transformedQuestionsGenerated || 0,
+      s.socraticQuestionsCount || 0,
+      s.completedPassagesCount || 0,
+      `"${s.lastLogin || ''}"`
     ]);
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -141,15 +141,15 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
       return;
     }
 
-    const headers = '이름\t이메일\t총 체류시간(분)\t변형문제 풀이(건)\t소크라테스 질의(건)\t성찰일지 작성(건)\t최근 학습 일시';
+    const headers = '이름\t이메일\t총 체류시간(분)\t변형문제 풀이(건)\t소크라테스 질의(건)\t학습완료 지문(건)\t최근 학습 일시';
     const rows = students.map((s) => [
       s.name || '',
       s.email || '',
       s.totalDwellTimeMinutes || 0,
-      s.generatedQuestionsCount || 0,
-      s.socraticConversationsCount || 0,
-      s.reflectionCount || 0,
-      s.lastActiveTime || ''
+      s.transformedQuestionsGenerated || 0,
+      s.socraticQuestionsCount || 0,
+      s.completedPassagesCount || 0,
+      s.lastLogin || ''
     ].join('\t'));
 
     const tsvText = [headers, ...rows].join('\n');
