@@ -99,18 +99,64 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
     setTimeout(() => setCopied(false), 2500);
   };
 
-  // Check admin authorization
-  const isRealAdmin = authUser ? isAdminUser(authUser.email) : false;
-  const [previewMode, setPreviewMode] = useState<boolean>(true); // Preview for demo
+  // Google Sheets Modal State
+  const [showSheetsModal, setShowSheetsModal] = useState(false);
+  const [sheetCopied, setSheetCopied] = useState(false);
 
-  const hasAccess = isRealAdmin || previewMode;
-  const metrics = calculateAnalyticsMetrics(students);
+  // CSV Export Handler
+  const handleExportCSV = () => {
+    if (students.length === 0) {
+      alert('내보낼 학습자 통계 데이터가 없습니다.');
+      return;
+    }
 
-  const filteredStudents = students.filter(
-    (s) =>
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    const headers = ['이름', '이메일', '총 체류시간(분)', '변형문제 생성/풀이(건)', '소크라테스 질의(건)', '성찰일지 작성(건)', '최근 학습 일시'];
+    const rows = students.map((s) => [
+      `"${(s.name || '').replace(/"/g, '""')}"`,
+      `"${(s.email || '').replace(/"/g, '""')}"`,
+      s.totalDwellTimeMinutes || 0,
+      s.generatedQuestionsCount || 0,
+      s.socraticConversationsCount || 0,
+      s.reflectionCount || 0,
+      `"${s.lastActiveTime || ''}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `CSAT_Agent_Student_Analytics_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Google Sheets Direct TSV Copy Handler
+  const handleCopyForGoogleSheets = () => {
+    if (students.length === 0) {
+      alert('복사할 학습자 데이터가 없습니다.');
+      return;
+    }
+
+    const headers = '이름\t이메일\t총 체류시간(분)\t변형문제 풀이(건)\t소크라테스 질의(건)\t성찰일지 작성(건)\t최근 학습 일시';
+    const rows = students.map((s) => [
+      s.name || '',
+      s.email || '',
+      s.totalDwellTimeMinutes || 0,
+      s.generatedQuestionsCount || 0,
+      s.socraticConversationsCount || 0,
+      s.reflectionCount || 0,
+      s.lastActiveTime || ''
+    ].join('\t'));
+
+    const tsvText = [headers, ...rows].join('\n');
+    navigator.clipboard.writeText(tsvText);
+    setSheetCopied(true);
+    setTimeout(() => setSheetCopied(false), 3000);
+  };
 
   if (!hasAccess) {
     return (
@@ -155,14 +201,35 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
           </div>
         </div>
 
-        <div className="flex items-center space-x-3 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {/* CSV Download Button */}
+          <button
+            onClick={handleExportCSV}
+            className="px-3.5 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 hover:text-emerald-200 font-semibold rounded-xl border border-emerald-500/40 transition-all flex items-center space-x-2 shadow-sm"
+            title="학습 데이터 CSV 파일 다운로드 (Excel/한글 호환 UTF-8 BOM)"
+          >
+            <i className="fa-solid fa-file-csv text-emerald-400 text-sm"></i>
+            <span>CSV 내보내기</span>
+          </button>
+
+          {/* Google Sheets Integration Button */}
+          <button
+            onClick={() => setShowSheetsModal(true)}
+            className="px-3.5 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-300 hover:text-green-200 font-semibold rounded-xl border border-green-500/40 transition-all flex items-center space-x-2 shadow-sm"
+            title="구글 시트(Google Sheets) 연동 및 내보내기"
+          >
+            <i className="fa-solid fa-table text-green-400 text-sm"></i>
+            <span>구글 시트 연동</span>
+          </button>
+
+          {/* Reset Button */}
           <button
             onClick={handleResetData}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-rose-900/50 text-slate-300 hover:text-rose-300 text-xs font-semibold rounded-xl border border-slate-700 hover:border-rose-700 transition-all flex items-center space-x-1.5"
+            className="px-3 py-2 bg-slate-800 hover:bg-rose-900/50 text-slate-400 hover:text-rose-300 font-semibold rounded-xl border border-slate-700 hover:border-rose-700 transition-all flex items-center space-x-1.5"
             title="수집된 모든 통계 데이터 리셋"
           >
             <i className="fa-solid fa-rotate-left"></i>
-            <span>통계 초기화</span>
+            <span>초기화</span>
           </button>
         </div>
       </div>
@@ -482,6 +549,126 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
                   setReportResult(null);
                 }}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Google Sheets Integration Modal */}
+      {showSheetsModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-green-500/30 rounded-3xl p-6 max-w-2xl w-full space-y-6 shadow-2xl animate-fade-in relative overflow-hidden">
+            {/* Background Decoration Gradient */}
+            <div className="absolute -right-16 -top-16 w-48 h-48 bg-green-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-green-500/20 text-green-400 border border-green-500/30 flex items-center justify-center text-xl font-bold">
+                  <i className="fa-solid fa-table"></i>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                    <span>Google Sheets (구글 시트) 실시간 자료 연동</span>
+                    <span className="px-2 py-0.5 bg-green-500/20 text-green-300 text-[10px] font-bold rounded">LIVE</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    수집된 학생 학습 통계 데이터를 구글 시트에 즉시 연동하거나 내보낼 수 있습니다.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowSheetsModal(false)}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-sm transition-all"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* Quick Action Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Option 1: Direct Clipboard TSV Copy */}
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-green-500/50 transition-all space-y-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center space-x-2 text-green-400 text-xs font-bold mb-1">
+                    <i className="fa-solid fa-paste"></i>
+                    <span>방식 1: 1초 클립보드 복사 연동</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    전체 학생 통계 데이터를 표 형태(TSV)로 즉시 복사합니다. 구글 시트에서 <kbd className="px-1.5 py-0.5 bg-slate-800 text-slate-200 rounded text-[10px] font-mono">Ctrl + V</kbd> 누르면 바로 셀별로 들어갑니다.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleCopyForGoogleSheets}
+                  className={`w-full py-2.5 px-4 text-xs font-bold rounded-xl border transition-all flex items-center justify-center space-x-2 shadow-lg ${
+                    sheetCopied
+                      ? 'bg-emerald-600 text-white border-emerald-500'
+                      : 'bg-green-600 hover:bg-green-500 text-white border-green-500'
+                  }`}
+                >
+                  <i className={`fa-solid ${sheetCopied ? 'fa-check' : 'fa-copy'}`}></i>
+                  <span>{sheetCopied ? '구글 시트용 데이터 복사 완료!' : '구글 시트용 데이터 복사하기'}</span>
+                </button>
+              </div>
+
+              {/* Option 2: CSV Direct Download */}
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-emerald-500/50 transition-all space-y-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center space-x-2 text-emerald-400 text-xs font-bold mb-1">
+                    <i className="fa-solid fa-file-csv"></i>
+                    <span>방식 2: UTF-8 CSV 파일 내보내기</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    구글 드라이브 / 구글 시트의 <span className="text-slate-200 font-semibold">'파일 → 가져오기'</span> 기능이나 Excel, 한글 등에 바로 열 수 있는 UTF-8 BOM CSV 파일입니다.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    handleExportCSV();
+                  }}
+                  className="w-full py-2.5 px-4 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-bold text-xs rounded-xl border border-emerald-500/40 transition-all flex items-center justify-center space-x-2"
+                >
+                  <i className="fa-solid fa-download"></i>
+                  <span>CSV 파일 즉시 다운로드</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Links & Tips */}
+            <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <h4 className="text-xs font-bold text-slate-200 flex items-center space-x-2">
+                <i className="fa-solid fa-lightbulb text-amber-400"></i>
+                <span>구글 시트 빠른 연동 팁</span>
+              </h4>
+              <ul className="text-[11px] text-slate-400 space-y-1.5 list-disc list-inside">
+                <li>
+                  새 구글 시트 생성이 필요하시면 아래 버튼을 클릭해 바로 새 시트를 여세요:
+                  <a
+                    href="https://sheets.new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center space-x-1 ml-2 text-green-400 hover:underline font-semibold"
+                  >
+                    <span>sheets.new 열기</span>
+                    <i className="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                  </a>
+                </li>
+                <li>구글 시트 첫 번째 셀(A1)을 클릭하고 <kbd className="px-1.5 py-0.5 bg-slate-800 text-slate-200 rounded text-[10px] font-mono">Ctrl + V</kbd>를 누르면 즉시 정돈된 시트가 완성됩니다.</li>
+                <li>자동 갱신 웹훅(Webhook)이 필요하신 경우 구글 시트 Apps Script의 WebHook URL로 지정하여 실시간 연동도 지원 가능합니다.</li>
+              </ul>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setShowSheetsModal(false)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all"
               >
                 닫기
               </button>
