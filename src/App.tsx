@@ -166,10 +166,10 @@ export default function App() {
             <OrchestratorTab selectedPassage={selectedPassage} customApiKey={customApiKey} />
           )}
           {activeTab === 'socratic' && (
-            <SocraticTab selectedPassage={selectedPassage} customApiKey={customApiKey} />
+            <SocraticTab selectedPassage={selectedPassage} customApiKey={customApiKey} authUser={authUser} />
           )}
           {activeTab === 'generator' && (
-            <GeneratorTab selectedPassage={selectedPassage} customApiKey={customApiKey} />
+            <GeneratorTab selectedPassage={selectedPassage} customApiKey={customApiKey} authUser={authUser} />
           )}
           {activeTab === 'vocab' && <VocabTab selectedPassage={selectedPassage} onSpeak={speakText} />}
           {activeTab === 'admin' && <AdminDashboardTab authUser={authUser} />}

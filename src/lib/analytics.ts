@@ -58,16 +58,35 @@ const STORAGE_KEY_STUDENTS = 'csat_analytics_students_v1';
 const STORAGE_KEY_SOCRATIC = 'csat_analytics_socratic_v1';
 const STORAGE_KEY_REFLECTIONS = 'csat_analytics_reflections_v1';
 
+const INITIAL_SAMPLE_STUDENT: StudentActivity = {
+  id: 'std-simin-01',
+  email: 'student@simin.hs.kr',
+  name: '김시민',
+  loginCount: 3,
+  lastLogin: new Date().toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
+  totalDwellTimeMinutes: 24,
+  completedPassagesCount: 2,
+  transformedQuestionsGenerated: 3,
+  quizAccuracyPercentage: 100,
+  socraticQuestionsCount: 2,
+  status: 'online',
+};
+
 /**
  * Get stored student activities from localStorage (or Firestore fallback)
  */
 export function getStoredStudentActivities(): StudentActivity[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_STUDENTS);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    if (!raw) {
+      const defaultList = [INITIAL_SAMPLE_STUDENT];
+      localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(defaultList));
+      return defaultList;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [INITIAL_SAMPLE_STUDENT];
   } catch {
-    return [];
+    return [INITIAL_SAMPLE_STUDENT];
   }
 }
 
@@ -123,13 +142,20 @@ export async function fetchFirestoreSocraticSummaries(): Promise<SocraticSummary
 }
 
 /**
- * Record user login event and save to Firestore & LocalStorage
+ * Helper to ensure student activity record exists in LocalStorage and Firestore
  */
-export function recordUserLogin(user: { email?: string | null; displayName?: string | null; photoURL?: string | null }): StudentActivity[] {
-  if (!user || !user.email) return getStoredStudentActivities();
+function ensureStudentExists(emailInput?: string | null, nameInput?: string | null): { students: StudentActivity[]; idx: number } {
+  const email = (emailInput && emailInput.trim().length > 0 && emailInput !== 'anonymous')
+    ? emailInput.trim().toLowerCase()
+    : 'student@simin.hs.kr';
+
+  const name = (nameInput && nameInput.trim().length > 0)
+    ? nameInput.trim()
+    : email.split('@')[0] || '학습자';
 
   const students = getStoredStudentActivities();
-  const cleanEmail = user.email.trim().toLowerCase();
+  let idx = students.findIndex((s) => s.email.toLowerCase() === email);
+
   const nowStr = new Date().toLocaleString('ko-KR', {
     year: 'numeric',
     month: '2-digit',
@@ -138,35 +164,44 @@ export function recordUserLogin(user: { email?: string | null; displayName?: str
     minute: '2-digit',
   });
 
-  const existingIndex = students.findIndex((s) => s.email.toLowerCase() === cleanEmail);
-  let updatedRecord: StudentActivity;
-
-  if (existingIndex >= 0) {
-    updatedRecord = {
-      ...students[existingIndex],
-      name: user.displayName || students[existingIndex].name || cleanEmail.split('@')[0],
-      avatarUrl: user.photoURL || students[existingIndex].avatarUrl,
-      loginCount: students[existingIndex].loginCount + 1,
-      lastLogin: nowStr,
-      status: 'online',
-    };
-    students[existingIndex] = updatedRecord;
-  } else {
-    updatedRecord = {
+  if (idx < 0) {
+    const newStudent: StudentActivity = {
       id: `std-${Date.now()}`,
-      email: cleanEmail,
-      name: user.displayName || cleanEmail.split('@')[0],
-      avatarUrl: user.photoURL || undefined,
+      email,
+      name,
       loginCount: 1,
       lastLogin: nowStr,
-      totalDwellTimeMinutes: 10,
-      completedPassagesCount: 1,
+      totalDwellTimeMinutes: 5,
+      completedPassagesCount: 0,
       transformedQuestionsGenerated: 0,
       quizAccuracyPercentage: 100,
       socraticQuestionsCount: 0,
       status: 'online',
     };
-    students.unshift(updatedRecord);
+    students.unshift(newStudent);
+    idx = 0;
+  } else {
+    students[idx].lastLogin = nowStr;
+    students[idx].status = 'online';
+    if (nameInput && nameInput !== students[idx].name) {
+      students[idx].name = nameInput;
+    }
+  }
+
+  return { students, idx };
+}
+
+/**
+ * Record user login event and save to Firestore & LocalStorage
+ */
+export function recordUserLogin(user: { email?: string | null; displayName?: string | null; photoURL?: string | null }): StudentActivity[] {
+  const email = user?.email || 'student@simin.hs.kr';
+  const name = user?.displayName || email.split('@')[0];
+
+  const { students, idx } = ensureStudentExists(email, name);
+  students[idx].loginCount = (students[idx].loginCount || 0) + 1;
+  if (user?.photoURL) {
+    students[idx].avatarUrl = user.photoURL;
   }
 
   // LocalStorage save
@@ -176,8 +211,8 @@ export function recordUserLogin(user: { email?: string | null; displayName?: str
 
   // Firestore DB save (async background)
   try {
-    const docId = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
-    setDoc(doc(db, 'students', docId), updatedRecord, { merge: true }).catch(() => {});
+    const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
+    setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
   } catch (e) {}
 
   return students;
@@ -195,7 +230,7 @@ export function recordSocraticQuestion(data: {
   questionText: string;
   hintLevel: number;
 }): void {
-  const email = data.studentEmail || '익명 학습자';
+  const email = data.studentEmail || 'student@simin.hs.kr';
   const name = data.studentName || email.split('@')[0];
   const nowStr = new Date().toLocaleString('ko-KR', {
     year: 'numeric',
@@ -234,37 +269,35 @@ export function recordSocraticQuestion(data: {
     setDoc(doc(db, 'socratic_logs', newLog.id), newLog).catch(() => {});
   } catch (e) {}
 
-  // Update student activity count
-  if (data.studentEmail) {
-    const students = getStoredStudentActivities();
-    const idx = students.findIndex((s) => s.email.toLowerCase() === data.studentEmail?.toLowerCase());
-    if (idx >= 0) {
-      students[idx].socraticQuestionsCount += 1;
-      students[idx].totalDwellTimeMinutes += 2;
-      localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
-      const docId = data.studentEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
-      setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
-    }
-  }
+  // Update student activity count (auto-create student if missing)
+  const { students, idx } = ensureStudentExists(email, name);
+  students[idx].socraticQuestionsCount = (students[idx].socraticQuestionsCount || 0) + 1;
+  students[idx].totalDwellTimeMinutes = (students[idx].totalDwellTimeMinutes || 0) + 2;
+
+  try {
+    localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+    const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
+    setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
+  } catch (e) {}
 }
 
 /**
  * Record transformed question generation event in Firestore & LocalStorage
  */
-export function recordGeneratorUsage(studentEmail?: string | null): void {
-  if (!studentEmail) return;
-  const students = getStoredStudentActivities();
-  const idx = students.findIndex((s) => s.email.toLowerCase() === studentEmail.toLowerCase());
-  if (idx >= 0) {
-    students[idx].transformedQuestionsGenerated += 1;
-    students[idx].completedPassagesCount += 1;
-    students[idx].totalDwellTimeMinutes += 5;
-    try {
-      localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
-      const docId = studentEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
-      setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
-    } catch (e) {}
-  }
+export function recordGeneratorUsage(studentEmail?: string | null, studentName?: string | null): void {
+  const email = studentEmail || 'student@simin.hs.kr';
+  const name = studentName || email.split('@')[0];
+
+  const { students, idx } = ensureStudentExists(email, name);
+  students[idx].transformedQuestionsGenerated = (students[idx].transformedQuestionsGenerated || 0) + 1;
+  students[idx].completedPassagesCount = (students[idx].completedPassagesCount || 0) + 1;
+  students[idx].totalDwellTimeMinutes = (students[idx].totalDwellTimeMinutes || 0) + 5;
+
+  try {
+    localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+    const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
+    setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
+  } catch (e) {}
 }
 
 /**
@@ -274,6 +307,8 @@ export function clearAnalyticsData(): void {
   try {
     localStorage.removeItem(STORAGE_KEY_STUDENTS);
     localStorage.removeItem(STORAGE_KEY_SOCRATIC);
+    localStorage.removeItem(STORAGE_KEY_REFLECTIONS);
+    localStorage.removeItem(STORAGE_KEY_EVENTS);
   } catch (e) {}
 }
 
@@ -323,20 +358,16 @@ export function recordStudentReflection(data: {
     setDoc(doc(db, 'student_reflections', newReflection.id), newReflection).catch(() => {});
   } catch (e) {}
 
-  // Update student completed passages count
-  if (data.studentEmail) {
-    const students = getStoredStudentActivities();
-    const idx = students.findIndex((s) => s.email.toLowerCase() === data.studentEmail?.toLowerCase());
-    if (idx >= 0) {
-      students[idx].completedPassagesCount += 1;
-      students[idx].totalDwellTimeMinutes += 3;
-      try {
-        localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
-        const docId = data.studentEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
-        setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
-      } catch (e) {}
-    }
-  }
+  // Update student completed passages count (auto-create student if missing)
+  const { students, idx } = ensureStudentExists(email, name);
+  students[idx].completedPassagesCount = (students[idx].completedPassagesCount || 0) + 1;
+  students[idx].totalDwellTimeMinutes = (students[idx].totalDwellTimeMinutes || 0) + 3;
+
+  try {
+    localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
+    const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
+    setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
+  } catch (e) {}
 
   return newReflection;
 }

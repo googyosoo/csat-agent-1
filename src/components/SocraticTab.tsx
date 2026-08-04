@@ -4,12 +4,15 @@ import { safeFetchJson } from '../lib/api';
 import { recordSocraticQuestion } from '../lib/analytics';
 import { auth } from '../lib/firebase';
 
+import { User } from '../lib/firebase';
+
 interface SocraticTabProps {
   selectedPassage: EBSPassage;
   customApiKey: string;
+  authUser?: User | null;
 }
 
-export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, customApiKey }) => {
+export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, customApiKey, authUser }) => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -49,10 +52,13 @@ export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, custo
       const botText = data.success ? data.text : `오류: ${data.error || '답변 생성 실패'}`;
       setChatHistory([...newHistory, { role: 'model', text: botText }]);
 
+      const currentEmail = authUser?.email || auth.currentUser?.email || 'student@simin.hs.kr';
+      const currentName = authUser?.displayName || auth.currentUser?.displayName || currentEmail.split('@')[0];
+
       // Record Socratic analytics
       recordSocraticQuestion({
-        studentEmail: auth.currentUser?.email,
-        studentName: auth.currentUser?.displayName,
+        studentEmail: currentEmail,
+        studentName: currentName,
         passageTitle: selectedPassage.title,
         lesson: selectedPassage.lesson,
         itemNo: selectedPassage.itemNo,

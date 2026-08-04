@@ -4,12 +4,15 @@ import { safeFetchJson } from '../lib/api';
 import { recordGeneratorUsage, recordLearningEvent } from '../lib/analytics';
 import { auth } from '../lib/firebase';
 
+import { User } from '../lib/firebase';
+
 interface GeneratorTabProps {
   selectedPassage: EBSPassage;
   customApiKey: string;
+  authUser?: User | null;
 }
 
-export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, customApiKey }) => {
+export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, customApiKey, authUser }) => {
   const [targetType, setTargetType] = useState('빈칸 추론');
   const [difficulty, setDifficulty] = useState('수능 표준');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -20,13 +23,16 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
 
   const [generatorError, setGeneratorError] = useState<string | null>(null);
 
+  const currentEmail = authUser?.email || auth.currentUser?.email || 'student@simin.hs.kr';
+  const currentName = authUser?.displayName || auth.currentUser?.displayName || currentEmail.split('@')[0];
+
   const handleSelectUserChoice = (idx: number) => {
     setUserChoice(idx);
     setShowAnalysis(true);
-    if (auth.currentUser?.email && generatedItem) {
+    if (generatedItem) {
       recordLearningEvent({
-        studentEmail: auth.currentUser.email,
-        studentName: auth.currentUser.displayName || undefined,
+        studentEmail: currentEmail,
+        studentName: currentName,
         subject: '진로영어',
         passageId: selectedPassage.id,
         lesson: selectedPassage.lesson,
@@ -72,7 +78,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
 
       if (data.success && data.data) {
         setGeneratedItem(data.data);
-        recordGeneratorUsage(auth.currentUser?.email || 'anonymous');
+        recordGeneratorUsage(currentEmail, currentName);
       } else {
         throw new Error(data.error || '변형 문항 생성 실패');
       }
