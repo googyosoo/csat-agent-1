@@ -102,10 +102,22 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
   // Google Sheets Modal State
   const [showSheetsModal, setShowSheetsModal] = useState(false);
   const [sheetCopied, setSheetCopied] = useState(false);
+  const [previewMode, setPreviewMode] = useState<boolean>(true); // Default to preview mode for full access
+
+  // Authorization Check
+  const isRealAdmin = authUser ? isAdminUser(authUser.email) : false;
+  const hasAccess = isRealAdmin || previewMode;
+
+  const metrics = calculateAnalyticsMetrics(students || []);
+  const filteredStudents = (students || []).filter(
+    (s) =>
+      (s?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s?.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   // CSV Export Handler
   const handleExportCSV = () => {
-    if (students.length === 0) {
+    if (!students || students.length === 0) {
       alert('내보낼 학습자 통계 데이터가 없습니다.');
       return;
     }
@@ -136,7 +148,7 @@ export const AdminDashboardTab: React.FC<AdminDashboardTabProps> = ({ authUser }
 
   // Google Sheets Direct TSV Copy Handler
   const handleCopyForGoogleSheets = () => {
-    if (students.length === 0) {
+    if (!students || students.length === 0) {
       alert('복사할 학습자 데이터가 없습니다.');
       return;
     }
