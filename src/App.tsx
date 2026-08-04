@@ -99,7 +99,7 @@ export default function App() {
 
   // If not logged in, render First-screen Entrance Landing Page
   if (!authUser) {
-    return <LandingPage deniedReason={deniedReason} />;
+    return <LandingPage deniedReason={deniedReason} onSuccessLogin={(u) => setAuthUser(u)} />;
   }
 
   return (

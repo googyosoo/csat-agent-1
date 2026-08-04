@@ -1,22 +1,21 @@
 import React, { useState } from 'react';
-import { signInWithGoogle } from '../lib/firebase';
+import { User, createMockGoogleUser } from '../lib/firebase';
+import { LoginModal } from './LoginModal';
+import { recordUserLogin } from '../lib/analytics';
 
 interface LandingPageProps {
   deniedReason: string | null;
+  onSuccessLogin?: (user: User) => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason }) => {
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSuccessLogin }) => {
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  const handleLogin = async () => {
-    if (isLoggingIn) return;
-    setIsLoggingIn(true);
-    try {
-      await signInWithGoogle();
-    } catch (err: any) {
-      console.error('[Google Login Error]:', err?.message);
-    } finally {
-      setIsLoggingIn(false);
+  const handleGuestLogin = () => {
+    const guestUser = createMockGoogleUser('english1@simin.hs.kr', 'english1');
+    recordUserLogin(guestUser);
+    if (onSuccessLogin) {
+      onSuccessLogin(guestUser);
     }
   };
 
@@ -38,14 +37,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason }) => {
           </div>
         </div>
 
-        <button
-          onClick={handleLogin}
-          disabled={isLoggingIn}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/40 transition-all flex items-center space-x-2 disabled:opacity-50"
-        >
-          <i className={`fa-brands fa-google ${isLoggingIn ? 'fa-spin' : ''}`}></i>
-          <span>{isLoggingIn ? '인증 중...' : 'Google 로그인'}</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleGuestLogin}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition-all border border-slate-700"
+          >
+            체험하기 (게스트)
+          </button>
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/40 transition-all flex items-center space-x-2"
+          >
+            <i className="fa-brands fa-google text-xs"></i>
+            <span>Google 로그인</span>
+          </button>
+        </div>
       </header>
 
       {/* Hero Body Content */}
@@ -53,7 +59,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason }) => {
         {/* Top Announcement Badge */}
         <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-blue-950/80 border border-blue-500/40 text-blue-300 text-xs font-semibold shadow-inner">
           <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-          <span>심인고등학교 학생 전용 (@simin.hs.kr) 공식 AI 학습 게이트</span>
+          <span>심인고등학교 학생 및 지정 관리자 공식 AI 학습 게이트</span>
         </div>
 
         {/* Hero Headline */}
@@ -72,29 +78,44 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason }) => {
 
         {/* Access Denied Warning Alert */}
         {deniedReason && (
-          <div className="w-full max-w-md p-4 bg-rose-950/80 border border-rose-500/60 rounded-2xl text-rose-200 text-xs font-semibold text-center space-y-1 shadow-xl animate-bounce">
+          <div className="w-full max-w-md p-4 bg-rose-950/80 border border-rose-500/60 rounded-2xl text-rose-200 text-xs font-semibold text-center space-y-1 shadow-xl">
             <div className="flex items-center justify-center space-x-2 text-rose-400 font-bold">
               <i className="fa-solid fa-circle-exclamation text-base"></i>
-              <span>로그인 접근 제한</span>
+              <span>접근 안내</span>
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed">{deniedReason}</p>
           </div>
         )}
 
-        {/* CTA Large Google Login Button */}
-        <div className="flex flex-col items-center space-y-3 w-full max-w-xs">
+        {/* CTA Large Google Login & Guest Button */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-md">
           <button
-            onClick={handleLogin}
-            disabled={isLoggingIn}
-            className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-900/50 hover:shadow-blue-600/30 transition-all flex items-center justify-center space-x-3 border border-blue-400/30 disabled:opacity-50 group"
+            onClick={() => setShowLoginModal(true)}
+            className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-900/50 hover:shadow-blue-600/30 transition-all flex items-center justify-center space-x-3 border border-blue-400/30 group"
           >
-            <i className={`fa-brands fa-google text-lg ${isLoggingIn ? 'fa-spin' : 'group-hover:scale-110 transition-transform'}`}></i>
+            <i className="fa-brands fa-google text-lg group-hover:scale-110 transition-transform"></i>
             <span>Google 계정으로 시작하기</span>
           </button>
-          <span className="text-[11px] text-slate-400 font-mono">
-            🔒 @simin.hs.kr 학교 이메일 전용
-          </span>
+
+          <button
+            onClick={handleGuestLogin}
+            className="w-full sm:w-auto px-6 py-4 bg-slate-900 hover:bg-slate-800 text-slate-200 font-bold text-sm rounded-2xl shadow-md border border-slate-800 transition-all flex items-center justify-center space-x-2"
+          >
+            <i className="fa-solid fa-rocket text-cyan-400"></i>
+            <span>바로 체험 시작하기</span>
+          </button>
         </div>
+
+        {/* Login Modal */}
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onSuccessLogin={(user) => {
+            if (onSuccessLogin) {
+              onSuccessLogin(user);
+            }
+          }}
+        />
 
         {/* 4 Core Features Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full pt-8 border-t border-slate-800/80">
