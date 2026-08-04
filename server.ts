@@ -1622,8 +1622,11 @@ function loadStoreFromFile(): AnalyticsStore {
     if (fs.existsSync(DATA_FILE_PATH)) {
       const raw = fs.readFileSync(DATA_FILE_PATH, 'utf-8');
       const parsed = JSON.parse(raw);
+      const rawStudents = Array.isArray(parsed.students) ? parsed.students : [];
+      // Filter out dummy sample student
+      const cleanedStudents = rawStudents.filter((s: any) => s.email && s.email.toLowerCase() !== 'student@simin.hs.kr');
       return {
-        students: Array.isArray(parsed.students) ? parsed.students : [],
+        students: cleanedStudents,
         socraticLogs: Array.isArray(parsed.socraticLogs) ? parsed.socraticLogs : [],
         reflections: Array.isArray(parsed.reflections) ? parsed.reflections : [],
       };
@@ -1632,21 +1635,7 @@ function loadStoreFromFile(): AnalyticsStore {
     console.warn('[Analytics File Store Load Error]:', err);
   }
   return {
-    students: [
-      {
-        id: 'std-simin-01',
-        email: 'student@simin.hs.kr',
-        name: '김시민',
-        loginCount: 3,
-        lastLogin: new Date().toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
-        totalDwellTimeMinutes: 24,
-        completedPassagesCount: 2,
-        transformedQuestionsGenerated: 3,
-        quizAccuracyPercentage: 100,
-        socraticQuestionsCount: 2,
-        status: 'online',
-      }
-    ],
+    students: [],
     socraticLogs: [],
     reflections: [],
   };

@@ -3,9 +3,8 @@
  */
 
 export const ADMIN_EMAILS: string[] = [
-  'kiparang999@gmail.com',
-  'hongjinwoo@simin.hs.kr',
   'sitech3@simin.hs.kr',
+  'hongjinwoo@simin.hs.kr',
 ];
 
 export const ALLOWED_STUDENT_DOMAIN = '@simin.hs.kr';

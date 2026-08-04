@@ -59,20 +59,6 @@ const STORAGE_KEY_STUDENTS = 'csat_analytics_students_v1';
 const STORAGE_KEY_SOCRATIC = 'csat_analytics_socratic_v1';
 const STORAGE_KEY_REFLECTIONS = 'csat_analytics_reflections_v1';
 
-const INITIAL_SAMPLE_STUDENT: StudentActivity = {
-  id: 'std-simin-01',
-  email: 'student@simin.hs.kr',
-  name: '김시민',
-  loginCount: 3,
-  lastLogin: new Date().toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
-  totalDwellTimeMinutes: 24,
-  completedPassagesCount: 2,
-  transformedQuestionsGenerated: 3,
-  quizAccuracyPercentage: 100,
-  socraticQuestionsCount: 2,
-  status: 'online',
-};
-
 /**
  * Helper to sync student data to Central Server API
  */
@@ -82,25 +68,26 @@ function syncStudentToServer(student: StudentActivity): void {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(student),
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn('[syncStudentToServer Failed]:', err);
+    });
   } catch (e) {}
 }
 
 /**
- * Get stored student activities from localStorage (or Firestore fallback)
+ * Get stored student activities from localStorage (filters out dummy accounts)
  */
 export function getStoredStudentActivities(): StudentActivity[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_STUDENTS);
-    if (!raw) {
-      const defaultList = [INITIAL_SAMPLE_STUDENT];
-      localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(defaultList));
-      return defaultList;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [INITIAL_SAMPLE_STUDENT];
+    if (Array.isArray(parsed)) {
+      return parsed.filter((s) => s.email && s.email.toLowerCase() !== 'student@simin.hs.kr');
+    }
+    return [];
   } catch {
-    return [INITIAL_SAMPLE_STUDENT];
+    return [];
   }
 }
 
@@ -193,13 +180,16 @@ export async function fetchFirestoreSocraticSummaries(): Promise<SocraticSummary
  * Helper to ensure student activity record exists in LocalStorage and Firestore
  */
 function ensureStudentExists(emailInput?: string | null, nameInput?: string | null): { students: StudentActivity[]; idx: number } {
+  const currentAuthEmail = auth.currentUser?.email;
+  const currentAuthName = auth.currentUser?.displayName;
+
   const email = (emailInput && emailInput.trim().length > 0 && emailInput !== 'anonymous')
     ? emailInput.trim().toLowerCase()
-    : 'student@simin.hs.kr';
+    : (currentAuthEmail ? currentAuthEmail.trim().toLowerCase() : 'english1@simin.hs.kr');
 
   const name = (nameInput && nameInput.trim().length > 0)
     ? nameInput.trim()
-    : email.split('@')[0] || '학습자';
+    : (currentAuthName || email.split('@')[0] || '학습자');
 
   const students = getStoredStudentActivities();
   let idx = students.findIndex((s) => s.email.toLowerCase() === email);
@@ -243,8 +233,8 @@ function ensureStudentExists(emailInput?: string | null, nameInput?: string | nu
  * Record user login event and save to Firestore, Server API & LocalStorage
  */
 export function recordUserLogin(user: { email?: string | null; displayName?: string | null; photoURL?: string | null }): StudentActivity[] {
-  const email = user?.email || 'student@simin.hs.kr';
-  const name = user?.displayName || email.split('@')[0];
+  const email = user?.email || auth.currentUser?.email || 'english1@simin.hs.kr';
+  const name = user?.displayName || auth.currentUser?.displayName || email.split('@')[0];
 
   const { students, idx } = ensureStudentExists(email, name);
   students[idx].loginCount = (students[idx].loginCount || 0) + 1;
@@ -281,8 +271,8 @@ export function recordSocraticQuestion(data: {
   questionText: string;
   hintLevel: number;
 }): void {
-  const email = data.studentEmail || 'student@simin.hs.kr';
-  const name = data.studentName || email.split('@')[0];
+  const email = data.studentEmail || auth.currentUser?.email || 'english1@simin.hs.kr';
+  const name = data.studentName || auth.currentUser?.displayName || email.split('@')[0];
   const nowStr = new Date().toLocaleString('ko-KR', {
     year: 'numeric',
     month: '2-digit',
@@ -346,8 +336,8 @@ export function recordSocraticQuestion(data: {
  * Record transformed question generation event in Firestore, Server API & LocalStorage
  */
 export function recordGeneratorUsage(studentEmail?: string | null, studentName?: string | null): void {
-  const email = studentEmail || 'student@simin.hs.kr';
-  const name = studentName || email.split('@')[0];
+  const email = studentEmail || auth.currentUser?.email || 'english1@simin.hs.kr';
+  const name = studentName || auth.currentUser?.displayName || email.split('@')[0];
 
   const { students, idx } = ensureStudentExists(email, name);
   students[idx].transformedQuestionsGenerated = (students[idx].transformedQuestionsGenerated || 0) + 1;
@@ -386,8 +376,8 @@ export function recordStudentReflection(data: {
   passageTitle: string;
   reflectionText: string;
 }): StudentReflection {
-  const email = data.studentEmail || 'student@simin.hs.kr';
-  const name = data.studentName || email.split('@')[0];
+  const email = data.studentEmail || auth.currentUser?.email || 'english1@simin.hs.kr';
+  const name = data.studentName || auth.currentUser?.displayName || email.split('@')[0];
   const nowStr = new Date().toLocaleString('ko-KR', {
     year: 'numeric',
     month: '2-digit',
