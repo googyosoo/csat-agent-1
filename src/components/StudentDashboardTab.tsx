@@ -20,15 +20,6 @@ interface StudentDashboardTabProps {
   onSelectPassage?: (passageId: string) => void;
 }
 
-interface StudentReportResult {
-  studentEmail: string;
-  studentName: string;
-  personalizedFeedback: string;
-  schoolRecordSetek: string;
-  byteCount: number;
-  keyCompetencies: string[];
-}
-
 export const StudentDashboardTab: React.FC<StudentDashboardTabProps> = ({
   authUser,
   dataset,
@@ -42,11 +33,6 @@ export const StudentDashboardTab: React.FC<StudentDashboardTabProps> = ({
   const [myReflections, setMyReflections] = useState<StudentReflection[]>([]);
   const [myEvents, setMyEvents] = useState<LearningEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // AI My Report Modal
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [reportResult, setReportResult] = useState<StudentReportResult | null>(null);
-  const [showReportModal, setShowReportModal] = useState(false);
 
   useEffect(() => {
     loadMyData();
@@ -111,44 +97,6 @@ export const StudentDashboardTab: React.FC<StudentDashboardTabProps> = ({
     if (e.isCorrect) typeMap[t].correct += 1;
   });
 
-  const handleGenerateMyReport = async () => {
-    if (!myActivity) return;
-    setShowReportModal(true);
-    setIsGeneratingReport(true);
-    setReportResult(null);
-
-    try {
-      const data = await safeFetchJson('/api/gemini/student-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student: myActivity,
-          socraticLogs: mySocraticLogs,
-        }),
-      });
-
-      if (data.success && data.data) {
-        setReportResult(data.data);
-      }
-    } catch (err: any) {
-      console.error('[Student Report Error]:', err);
-    } finally {
-      setIsGeneratingReport(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="max-w-4xl mx-auto my-12 bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center space-y-4 shadow-2xl">
-        <div className="w-14 h-14 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center text-2xl mx-auto animate-bounce">
-          <i className="fa-solid fa-graduation-cap"></i>
-        </div>
-        <h2 className="text-base font-bold text-white">나의 개인 학습 대시보드 불러오는 중...</h2>
-        <p className="text-xs text-slate-400">학습 이력 및 성찰 기록을 준비하고 있습니다.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-16">
       {/* Welcome Banner */}
@@ -178,14 +126,6 @@ export const StudentDashboardTab: React.FC<StudentDashboardTabProps> = ({
             </p>
           </div>
         </div>
-
-        <button
-          onClick={handleGenerateMyReport}
-          className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-950/50 transition-all flex items-center space-x-2 shrink-0 self-start md:self-center"
-        >
-          <i className="fa-solid fa-wand-magic-sparkles text-cyan-300"></i>
-          <span>내 학습 성취도 & AI 세특 리포트</span>
-        </button>
       </div>
 
       {/* KPI Cards Grid */}
@@ -399,86 +339,6 @@ export const StudentDashboardTab: React.FC<StudentDashboardTabProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Student AI Report Modal */}
-      {showReportModal && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-purple-500/40 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 my-8">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center text-lg font-bold">
-                  <i className="fa-solid fa-graduation-cap"></i>
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">나의 AI 학습 성취도 & 생기부 세특 리포트</h3>
-                  <span className="text-[11px] text-slate-400 font-mono">{currentEmail}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all"
-              >
-                <i className="fa-solid fa-xmark"></i>
-              </button>
-            </div>
-
-            {isGeneratingReport ? (
-              <div className="py-16 text-center space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center text-xl font-bold mx-auto animate-bounce">
-                  <i className="fa-solid fa-brain animate-spin"></i>
-                </div>
-                <h4 className="text-sm font-bold text-white">CSAT AI가 내 학습 이력을 분석 중입니다...</h4>
-                <p className="text-xs text-slate-400">
-                  EBS 지문 성취도, 소크라테스 질의 및 변형문제 데이터를 종합 분석하고 있습니다.
-                </p>
-              </div>
-            ) : reportResult ? (
-              <div className="space-y-4 text-xs">
-                <div className="flex flex-wrap gap-2">
-                  {reportResult.keyCompetencies.map((tag, idx) => (
-                    <span key={idx} className="px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[11px] font-bold rounded-lg">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <h4 className="font-bold text-slate-200 flex items-center space-x-2 text-xs">
-                    <i className="fa-solid fa-user-check text-cyan-400"></i>
-                    <span>나의 맞춤형 학습 성취도 분석</span>
-                  </h4>
-                  <p className="text-slate-300 leading-relaxed text-[11px] font-sans">
-                    {reportResult.personalizedFeedback}
-                  </p>
-                </div>
-
-                <div className="bg-slate-950 p-4 rounded-2xl border border-purple-500/30 space-y-2">
-                  <h4 className="font-bold text-purple-300 flex items-center space-x-2 text-xs">
-                    <i className="fa-solid fa-file-signature text-purple-400"></i>
-                    <span>내 생활기록부 세특 참고 문안 (800~900 바이트)</span>
-                  </h4>
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 text-slate-200 leading-relaxed font-serif text-[12px] whitespace-pre-wrap">
-                    {reportResult.schoolRecordSetek}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-8 text-center text-slate-400 text-xs">
-                리포트를 가져올 수 없습니다.
-              </div>
-            )}
-
-            <div className="flex justify-end pt-2 border-t border-slate-800">
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
