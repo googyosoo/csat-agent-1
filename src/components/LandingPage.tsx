@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { User, createMockGoogleUser } from '../lib/firebase';
-import { LoginModal } from './LoginModal';
+import { signInWithGoogle, User } from '../lib/firebase';
 import { recordUserLogin } from '../lib/analytics';
 
 interface LandingPageProps {
@@ -9,13 +8,23 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSuccessLogin }) => {
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const handleGuestLogin = () => {
-    const guestUser = createMockGoogleUser('english1@simin.hs.kr', 'english1');
-    recordUserLogin(guestUser);
-    if (onSuccessLogin) {
-      onSuccessLogin(guestUser);
+  const handleGoogleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    try {
+      const user = await signInWithGoogle();
+      if (user) {
+        recordUserLogin(user);
+        if (onSuccessLogin) {
+          onSuccessLogin(user);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[LandingPage Google Login Error]:', err?.message);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -37,21 +46,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSucces
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={handleGuestLogin}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition-all border border-slate-700"
-          >
-            체험하기 (게스트)
-          </button>
-          <button
-            onClick={() => setShowLoginModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/40 transition-all flex items-center space-x-2"
-          >
-            <i className="fa-brands fa-google text-xs"></i>
-            <span>Google 로그인</span>
-          </button>
-        </div>
+        <button
+          onClick={handleGoogleLogin}
+          disabled={isLoggingIn}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/40 transition-all flex items-center space-x-2 disabled:opacity-50"
+        >
+          <i className={`fa-brands fa-google text-xs ${isLoggingIn ? 'fa-spin' : ''}`}></i>
+          <span>{isLoggingIn ? '인증 중...' : 'Google 로그인'}</span>
+        </button>
       </header>
 
       {/* Hero Body Content */}
@@ -59,7 +61,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSucces
         {/* Top Announcement Badge */}
         <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-blue-950/80 border border-blue-500/40 text-blue-300 text-xs font-semibold shadow-inner">
           <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-          <span>심인고등학교 학생 및 지정 관리자 공식 AI 학습 게이트</span>
+          <span>심인고등학교 학생 전용 (@simin.hs.kr) 공식 AI 학습 게이트</span>
         </div>
 
         {/* Hero Headline */}
@@ -78,92 +80,78 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSucces
 
         {/* Access Denied Warning Alert */}
         {deniedReason && (
-          <div className="w-full max-w-md p-4 bg-rose-950/80 border border-rose-500/60 rounded-2xl text-rose-200 text-xs font-semibold text-center space-y-1 shadow-xl">
+          <div className="w-full max-w-md p-4 bg-rose-950/80 border border-rose-500/60 rounded-2xl text-rose-200 text-xs font-semibold text-center space-y-1 shadow-xl animate-pulse">
             <div className="flex items-center justify-center space-x-2 text-rose-400 font-bold">
               <i className="fa-solid fa-circle-exclamation text-base"></i>
-              <span>접근 안내</span>
+              <span>로그인 접근 제한</span>
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed">{deniedReason}</p>
           </div>
         )}
 
-        {/* CTA Large Google Login & Guest Button */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-md">
+        {/* CTA Large Google Login Button */}
+        <div className="flex flex-col items-center justify-center space-y-3 w-full max-w-xs">
           <button
-            onClick={() => setShowLoginModal(true)}
-            className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-900/50 hover:shadow-blue-600/30 transition-all flex items-center justify-center space-x-3 border border-blue-400/30 group"
+            onClick={handleGoogleLogin}
+            disabled={isLoggingIn}
+            className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-900/50 hover:shadow-blue-600/30 transition-all flex items-center justify-center space-x-3 border border-blue-400/30 disabled:opacity-50 group"
           >
-            <i className="fa-brands fa-google text-lg group-hover:scale-110 transition-transform"></i>
-            <span>Google 계정으로 시작하기</span>
+            <i className={`fa-brands fa-google text-lg ${isLoggingIn ? 'fa-spin' : 'group-hover:scale-110 transition-transform'}`}></i>
+            <span>{isLoggingIn ? '인증 진행 중...' : 'Google 계정으로 로그인'}</span>
           </button>
-
-          <button
-            onClick={handleGuestLogin}
-            className="w-full sm:w-auto px-6 py-4 bg-slate-900 hover:bg-slate-800 text-slate-200 font-bold text-sm rounded-2xl shadow-md border border-slate-800 transition-all flex items-center justify-center space-x-2"
-          >
-            <i className="fa-solid fa-rocket text-cyan-400"></i>
-            <span>바로 체험 시작하기</span>
-          </button>
+          <span className="text-[11px] text-slate-400 font-mono">
+            🔒 @simin.hs.kr 전용 계정만 가능
+          </span>
         </div>
-
-        {/* Login Modal */}
-        <LoginModal
-          isOpen={showLoginModal}
-          onClose={() => setShowLoginModal(false)}
-          onSuccessLogin={(user) => {
-            if (onSuccessLogin) {
-              onSuccessLogin(user);
-            }
-          }}
-        />
 
         {/* 4 Core Features Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full pt-8 border-t border-slate-800/80">
-          <div className="p-5 bg-slate-900/80 rounded-2xl border border-slate-800 text-left space-y-2 hover:border-blue-500/40 transition-all">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-base">
+          <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-left space-y-2 backdrop-blur-sm hover:border-blue-500/40 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
               <i className="fa-solid fa-book-open"></i>
             </div>
-            <h3 className="text-xs font-bold text-slate-100">지문 분석 워크북</h3>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              EBS 연계 지문의 구문·어휘·해설 정밀 분석 및 음성 TTS 낭독 기능 제공.
+            <h3 className="font-bold text-sm text-slate-100">지문 정밀 오케스트레이션</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              구문해석, 키워드, 어휘, 문법, 배경지식을 멀티 에이전트가 입체적으로 자동 분석합니다.
             </p>
           </div>
 
-          <div className="p-5 bg-slate-900/80 rounded-2xl border border-slate-800 text-left space-y-2 hover:border-purple-500/40 transition-all">
-            <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-base">
+          <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-left space-y-2 backdrop-blur-sm hover:border-purple-500/40 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+              <i className="fa-solid fa-[#00F2FE]"></i>
               <i className="fa-solid fa-brain"></i>
             </div>
-            <h3 className="text-xs font-bold text-slate-100">소크라테스 AI 튜터</h3>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              3단계 힌트 시스템으로 스스로 정답의 논리를 찾도록 유도하는 AI 튜터링.
+            <h3 className="font-bold text-sm text-slate-100">소크라테스 메타인지 튜터</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              직접 답을 주지 않고 단계별 역질문 힌트로 메타인지적 지문 파악을 유도합니다.
             </p>
           </div>
 
-          <div className="p-5 bg-slate-900/80 rounded-2xl border border-slate-800 text-left space-y-2 hover:border-amber-500/40 transition-all">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-base">
-              <i className="fa-solid fa-wand-magic-sparkles"></i>
+          <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-left space-y-2 backdrop-blur-sm hover:border-cyan-500/40 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+              <i className="fa-solid fa-bolt"></i>
             </div>
-            <h3 className="text-xs font-bold text-slate-100">AI 변형문항 생성기</h3>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              빈칸·어법·삽입 등 수능 최적화 6대 유형 변형문항 및 해설 동적 생성.
+            <h3 className="font-bold text-sm text-slate-100">수능 변형문제 무한 생성</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              빈칸추론, 문장삽입, 순서배열 등 출제 가능성이 가장 높은 최적화 문항을 자동 생성합니다.
             </p>
           </div>
 
-          <div className="p-5 bg-slate-900/80 rounded-2xl border border-slate-800 text-left space-y-2 hover:border-emerald-500/40 transition-all">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-base">
-              <i className="fa-solid fa-file-pen"></i>
+          <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-left space-y-2 backdrop-blur-sm hover:border-emerald-500/40 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+              <i className="fa-solid fa-chart-pie"></i>
             </div>
-            <h3 className="text-xs font-bold text-slate-100">오답노트 & 세특 축적</h3>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              개인 오답 족보 자동 정리 및 교사용 생기부 세특 초안 자동 기록.
+            <h3 className="font-bold text-sm text-slate-100">개인 맞춤형 진로 대시보드</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              학습자의 활동과 성찰 기록이 대시보드 및 관리자 시스템에 실시간으로 연동 저장됩니다.
             </p>
           </div>
         </div>
       </main>
 
-      {/* Footer Bar */}
-      <footer className="py-4 border-t border-slate-800/80 text-center text-[11px] text-slate-500 relative z-10 bg-slate-950/60">
-        © 2026 심인고등학교 CSAT Agent AI. All Rights Reserved. (Simin High School Authorized Platform)
+      {/* Footer */}
+      <footer className="px-6 py-4 border-t border-slate-800/60 text-center text-xs text-slate-500 relative z-10">
+        <p>© 2027 Simin High School CSAT English AI Agent Platform. All rights reserved.</p>
       </footer>
     </div>
   );

@@ -35,8 +35,9 @@ export interface AccessCheckResult {
 
 /**
  * Validate overall access permission for the logged-in user:
- * 1. Designated admins: Allowed with 'admin' role.
- * 2. All other users: Allowed with 'student' role.
+ * 1. Designated admins (sitech3@simin.hs.kr, hongjinwoo@simin.hs.kr): Allowed with 'admin' role.
+ * 2. Students with '@simin.hs.kr' domain: Allowed with 'student' role.
+ * 3. Other domains: Denied.
  */
 export function validateUserAccess(email?: string | null): AccessCheckResult {
   if (!email) {
@@ -48,6 +49,15 @@ export function validateUserAccess(email?: string | null): AccessCheckResult {
     return { allowed: true, role: 'admin' };
   }
 
-  // 2. All other accounts are welcomed as students with full access
-  return { allowed: true, role: 'student' };
+  // 2. Check if student email has @simin.hs.kr domain
+  if (isAllowedStudentDomain(email)) {
+    return { allowed: true, role: 'student' };
+  }
+
+  // 3. Deny all other domains
+  return {
+    allowed: false,
+    role: 'denied',
+    reason: `접근 제한: 심인고등학교 전용 서비스입니다. @simin.hs.kr 도메인 계정으로 로그인해 주세요.`,
+  };
 }
