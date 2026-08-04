@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 
@@ -1607,24 +1608,59 @@ ${cleanPassage}`;
   }
 });
 
-/* ──────── Central Student Analytics In-Memory Store & REST APIs ──────── */
-const centralStudentStore: any[] = [
-  {
-    id: 'std-simin-01',
-    email: 'student@simin.hs.kr',
-    name: '김시민',
-    loginCount: 3,
-    lastLogin: new Date().toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
-    totalDwellTimeMinutes: 24,
-    completedPassagesCount: 2,
-    transformedQuestionsGenerated: 3,
-    quizAccuracyPercentage: 100,
-    socraticQuestionsCount: 2,
-    status: 'online',
+/* ──────── Central Student Analytics File-Backed Store & REST APIs ──────── */
+const DATA_FILE_PATH = path.join(process.cwd(), 'data_analytics_store.json');
+
+interface AnalyticsStore {
+  students: any[];
+  socraticLogs: any[];
+  reflections: any[];
+}
+
+function loadStoreFromFile(): AnalyticsStore {
+  try {
+    if (fs.existsSync(DATA_FILE_PATH)) {
+      const raw = fs.readFileSync(DATA_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return {
+        students: Array.isArray(parsed.students) ? parsed.students : [],
+        socraticLogs: Array.isArray(parsed.socraticLogs) ? parsed.socraticLogs : [],
+        reflections: Array.isArray(parsed.reflections) ? parsed.reflections : [],
+      };
+    }
+  } catch (err) {
+    console.warn('[Analytics File Store Load Error]:', err);
   }
-];
-const centralSocraticStore: any[] = [];
-const centralReflectionStore: any[] = [];
+  return {
+    students: [
+      {
+        id: 'std-simin-01',
+        email: 'student@simin.hs.kr',
+        name: '김시민',
+        loginCount: 3,
+        lastLogin: new Date().toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
+        totalDwellTimeMinutes: 24,
+        completedPassagesCount: 2,
+        transformedQuestionsGenerated: 3,
+        quizAccuracyPercentage: 100,
+        socraticQuestionsCount: 2,
+        status: 'online',
+      }
+    ],
+    socraticLogs: [],
+    reflections: [],
+  };
+}
+
+const centralStore: AnalyticsStore = loadStoreFromFile();
+
+function saveStoreToFile(): void {
+  try {
+    fs.writeFileSync(DATA_FILE_PATH, JSON.stringify(centralStore, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Analytics File Store Save Error]:', err);
+  }
+}
 
 // API 1: Sync or update student activity
 app.post('/api/analytics/sync-student', (req, res) => {
@@ -1634,11 +1670,11 @@ app.post('/api/analytics/sync-student', (req, res) => {
       return res.status(400).json({ success: false, error: 'Student email is required' });
     }
     const cleanEmail = student.email.trim().toLowerCase();
-    const idx = centralStudentStore.findIndex(s => s.email.toLowerCase() === cleanEmail);
+    const idx = centralStore.students.findIndex(s => s.email.toLowerCase() === cleanEmail);
     if (idx >= 0) {
-      centralStudentStore[idx] = { ...centralStudentStore[idx], ...student };
+      centralStore.students[idx] = { ...centralStore.students[idx], ...student };
     } else {
-      centralStudentStore.unshift({
+      centralStore.students.unshift({
         id: student.id || `std-${Date.now()}`,
         email: cleanEmail,
         name: student.name || cleanEmail.split('@')[0],
@@ -1652,7 +1688,8 @@ app.post('/api/analytics/sync-student', (req, res) => {
         status: 'online',
       });
     }
-    res.json({ success: true, count: centralStudentStore.length });
+    saveStoreToFile();
+    res.json({ success: true, count: centralStore.students.length });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1660,7 +1697,7 @@ app.post('/api/analytics/sync-student', (req, res) => {
 
 // API 2: Get all student activities
 app.get('/api/analytics/students', (req, res) => {
-  res.json({ success: true, data: centralStudentStore });
+  res.json({ success: true, data: centralStore.students });
 });
 
 // API 3: Record Socratic log
@@ -1668,16 +1705,16 @@ app.post('/api/analytics/socratic-log', (req, res) => {
   try {
     const log = req.body;
     if (log && log.studentEmail) {
-      centralSocraticStore.unshift(log);
+      centralStore.socraticLogs.unshift(log);
       // Auto-update student activity in central store
       const cleanEmail = log.studentEmail.trim().toLowerCase();
-      const idx = centralStudentStore.findIndex(s => s.email.toLowerCase() === cleanEmail);
+      const idx = centralStore.students.findIndex(s => s.email.toLowerCase() === cleanEmail);
       if (idx >= 0) {
-        centralStudentStore[idx].socraticQuestionsCount = (centralStudentStore[idx].socraticQuestionsCount || 0) + 1;
-        centralStudentStore[idx].totalDwellTimeMinutes = (centralStudentStore[idx].totalDwellTimeMinutes || 0) + 2;
-        centralStudentStore[idx].lastLogin = new Date().toLocaleString('ko-KR');
+        centralStore.students[idx].socraticQuestionsCount = (centralStore.students[idx].socraticQuestionsCount || 0) + 1;
+        centralStore.students[idx].totalDwellTimeMinutes = (centralStore.students[idx].totalDwellTimeMinutes || 0) + 2;
+        centralStore.students[idx].lastLogin = new Date().toLocaleString('ko-KR');
       } else {
-        centralStudentStore.unshift({
+        centralStore.students.unshift({
           id: `std-${Date.now()}`,
           email: cleanEmail,
           name: log.studentName || cleanEmail.split('@')[0],
@@ -1691,8 +1728,9 @@ app.post('/api/analytics/socratic-log', (req, res) => {
           status: 'online',
         });
       }
+      saveStoreToFile();
     }
-    res.json({ success: true, count: centralSocraticStore.length });
+    res.json({ success: true, count: centralStore.socraticLogs.length });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1700,7 +1738,7 @@ app.post('/api/analytics/socratic-log', (req, res) => {
 
 // API 4: Get Socratic logs
 app.get('/api/analytics/socratic-logs', (req, res) => {
-  res.json({ success: true, data: centralSocraticStore });
+  res.json({ success: true, data: centralStore.socraticLogs });
 });
 
 // API 5: Record Student Reflection
@@ -1708,15 +1746,16 @@ app.post('/api/analytics/reflection', (req, res) => {
   try {
     const ref = req.body;
     if (ref && ref.studentEmail) {
-      centralReflectionStore.unshift(ref);
+      centralStore.reflections.unshift(ref);
       const cleanEmail = ref.studentEmail.trim().toLowerCase();
-      const idx = centralStudentStore.findIndex(s => s.email.toLowerCase() === cleanEmail);
+      const idx = centralStore.students.findIndex(s => s.email.toLowerCase() === cleanEmail);
       if (idx >= 0) {
-        centralStudentStore[idx].completedPassagesCount = (centralStudentStore[idx].completedPassagesCount || 0) + 1;
-        centralStudentStore[idx].totalDwellTimeMinutes = (centralStudentStore[idx].totalDwellTimeMinutes || 0) + 3;
+        centralStore.students[idx].completedPassagesCount = (centralStore.students[idx].completedPassagesCount || 0) + 1;
+        centralStore.students[idx].totalDwellTimeMinutes = (centralStore.students[idx].totalDwellTimeMinutes || 0) + 3;
       }
+      saveStoreToFile();
     }
-    res.json({ success: true, count: centralReflectionStore.length });
+    res.json({ success: true, count: centralStore.reflections.length });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1724,7 +1763,7 @@ app.post('/api/analytics/reflection', (req, res) => {
 
 // API 6: Get Student Reflections
 app.get('/api/analytics/reflections', (req, res) => {
-  res.json({ success: true, data: centralReflectionStore });
+  res.json({ success: true, data: centralStore.reflections });
 });
 
 async function startServer() {

@@ -70,27 +70,60 @@ const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => 
   const [reportError, setReportError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Load accumulated real data from Firestore DB (or LocalStorage fallback)
+  // Load accumulated real data from Firestore DB, Central Server API & LocalStorage
   const loadData = async () => {
     try {
-      console.log('[AdminDashboard] loadData started');
       setIsLoading(true);
-      const [sList, socList, refList] = await Promise.allSettled([
+      const [fsStudents, fsSoc, fsRef] = await Promise.allSettled([
         fetchFirestoreStudentActivities(),
         fetchFirestoreSocraticSummaries(),
         fetchFirestoreStudentReflections(),
       ]);
-      setStudents(sList.status === 'fulfilled' ? sList.value : getStoredStudentActivities());
-      setSocSummaries(socList.status === 'fulfilled' ? socList.value : []);
-      setReflections(refList.status === 'fulfilled' ? refList.value : []);
-      console.log('[AdminDashboard] loadData done', {
-        students: (sList.status === 'fulfilled' ? sList.value : []).length,
-        socratic: (socList.status === 'fulfilled' ? socList.value : []).length,
-        reflections: (refList.status === 'fulfilled' ? refList.value : []).length,
+
+      // Direct fetch from Central Server API as backup merge source
+      let apiStudents: StudentActivity[] = [];
+      try {
+        const res = await safeFetchJson('/api/analytics/students');
+        if (res && res.success && Array.isArray(res.data)) {
+          apiStudents = res.data;
+        }
+      } catch (e) {}
+
+      const localStudents = getStoredStudentActivities();
+
+      // Merge all student lists by email to ensure NO student is missed
+      const studentMap = new Map<string, StudentActivity>();
+      const mergeList = [
+        ...(fsStudents.status === 'fulfilled' ? fsStudents.value : []),
+        ...apiStudents,
+        ...localStudents,
+      ];
+
+      mergeList.forEach((s) => {
+        if (s && s.email) {
+          const cleanEmail = s.email.trim().toLowerCase();
+          const existing = studentMap.get(cleanEmail);
+          if (!existing) {
+            studentMap.set(cleanEmail, s);
+          } else {
+            studentMap.set(cleanEmail, {
+              ...existing,
+              ...s,
+              totalDwellTimeMinutes: Math.max(existing.totalDwellTimeMinutes || 0, s.totalDwellTimeMinutes || 0),
+              completedPassagesCount: Math.max(existing.completedPassagesCount || 0, s.completedPassagesCount || 0),
+              transformedQuestionsGenerated: Math.max(existing.transformedQuestionsGenerated || 0, s.transformedQuestionsGenerated || 0),
+              socraticQuestionsCount: Math.max(existing.socraticQuestionsCount || 0, s.socraticQuestionsCount || 0),
+              loginCount: Math.max(existing.loginCount || 0, s.loginCount || 0),
+            });
+          }
+        }
       });
+
+      setStudents(Array.from(studentMap.values()));
+      setSocSummaries(fsSoc.status === 'fulfilled' ? fsSoc.value : []);
+      setReflections(fsRef.status === 'fulfilled' ? fsRef.value : []);
     } catch (err) {
       console.error('[AdminDashboard] loadData error:', err);
-      // Even on total failure, show empty state
       setStudents(getStoredStudentActivities());
       setSocSummaries([]);
       setReflections([]);
