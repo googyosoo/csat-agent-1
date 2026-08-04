@@ -140,6 +140,7 @@ export default function App() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           isAdmin={isAdmin}
+          onSuccessLogin={(u) => setAuthUser(u)}
         />
 
         {/* Tab Content */}

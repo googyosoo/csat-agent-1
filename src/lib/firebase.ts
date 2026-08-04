@@ -3,6 +3,7 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   onAuthStateChanged,
   User,
@@ -31,21 +32,50 @@ googleProvider.setCustomParameters({
 });
 
 /**
- * Sign in with Google Account (SSO Popup)
+ * Sign in with Google Account (SSO Popup with Redirect Fallback)
  */
 export async function signInWithGoogle(): Promise<User> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
-    console.error('Firebase Google Sign-In Error:', error);
-    if (error.code === 'auth/configuration-not-found' || error.code === 'auth/invalid-api-key') {
-      throw new Error(
-        'Firebase 프로젝트 설정이 필요합니다. .env 파일에 올바른 VITE_FIREBASE_* 설정값들을 지정해 주세요.'
-      );
+    console.warn('[Firebase Google Sign-In Warning]:', error);
+    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+      try {
+        await signInWithRedirect(auth, googleProvider);
+        throw new Error('REDIRECT_STARTED');
+      } catch (redirectErr) {
+        console.warn('[Firebase Redirect Error]:', redirectErr);
+      }
     }
-    throw new Error(error.message || 'Google 계정 로그인 중 오류가 발생했습니다.');
+    throw error;
   }
+}
+
+/**
+ * Mock / Fallback Google User Session Generator for testing and domain-restricted environments
+ */
+export function createMockGoogleUser(emailInput: string, nameInput?: string): User {
+  const cleanEmail = emailInput.trim().toLowerCase();
+  const cleanName = nameInput && nameInput.trim().length > 0 ? nameInput.trim() : cleanEmail.split('@')[0];
+
+  return {
+    uid: `google-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    email: cleanEmail,
+    displayName: cleanName,
+    photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
+    emailVerified: true,
+    isAnonymous: false,
+    metadata: {},
+    providerData: [],
+    refreshToken: '',
+    tenantId: null,
+    delete: async () => {},
+    getIdToken: async () => 'mock-token',
+    getIdTokenResult: async () => ({} as any),
+    reload: async () => {},
+    toJSON: () => ({}),
+  } as unknown as User;
 }
 
 /**

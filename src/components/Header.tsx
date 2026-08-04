@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { EBSPassage } from '../types';
-import { User, signInWithGoogle, logout } from '../lib/firebase';
+import { User, logout } from '../lib/firebase';
+import { LoginModal } from './LoginModal';
 
 interface HeaderProps {
   selectedPassage: EBSPassage;
@@ -16,6 +17,7 @@ interface HeaderProps {
   activeTab?: string;
   setActiveTab?: (tab: string) => void;
   isAdmin?: boolean;
+  onSuccessLogin?: (user: User) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,18 +34,12 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab = 'library',
   setActiveTab,
   isAdmin = false,
+  onSuccessLogin,
 }) => {
-  const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  const handleGoogleLogin = async () => {
-    setIsLoggingIn(true);
-    try {
-      await signInWithGoogle();
-    } catch (err: any) {
-      console.error('[Google Login Error]:', err?.message);
-    } finally {
-      setIsLoggingIn(false);
-    }
+  const handleGoogleLoginClick = () => {
+    setShowLoginModal(true);
   };
 
   const handleLogout = async () => {
@@ -180,18 +176,28 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             ) : (
               <button
-                onClick={handleGoogleLogin}
-                disabled={isLoggingIn}
-                className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-[11px] sm:text-xs flex items-center space-x-1.5 transition-all shadow-md shadow-blue-900/30 disabled:opacity-50 shrink-0"
-                title="심인고등학교 계정(@simin.hs.kr) 전용"
+                onClick={handleGoogleLoginClick}
+                className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-[11px] sm:text-xs flex items-center space-x-1.5 transition-all shadow-md shadow-blue-900/30 shrink-0"
+                title="Google 계정 로그인"
               >
-                <i className={`fa-brands fa-google ${isLoggingIn ? 'fa-spin' : ''}`}></i>
-                <span>{isLoggingIn ? '...' : '로그인'}</span>
+                <i className="fa-brands fa-google text-xs"></i>
+                <span>Google 로그인</span>
               </button>
             )}
           </div>
         </div>
       </header>
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccessLogin={(user) => {
+          if (onSuccessLogin) {
+            onSuccessLogin(user);
+          }
+        }}
+      />
 
       {/* Mobile Quick Tab Navigation Bar */}
       {setActiveTab && (
