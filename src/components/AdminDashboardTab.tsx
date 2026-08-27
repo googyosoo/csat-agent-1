@@ -16,7 +16,7 @@ import { safeFetchJson } from '../lib/api';
 
 /* ──────── Error Boundary ──────── */
 interface EBState { hasError: boolean; error: Error | null }
-class DashboardErrorBoundary extends React.Component<{ children: ReactNode }, EBState> {
+class DashboardErrorBoundary extends Component<{ children: ReactNode }, EBState> {
   state: EBState = { hasError: false, error: null };
   static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
   componentDidCatch(error: Error, info: ErrorInfo) { console.error('[AdminDashboard ErrorBoundary]', error, info); }
