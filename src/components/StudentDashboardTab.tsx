@@ -25,7 +25,7 @@ export const StudentDashboardTab: React.FC<StudentDashboardTabProps> = ({
   dataset,
   onSelectPassage,
 }) => {
-  const currentEmail = (authUser?.email || 'student@simin.hs.kr').toLowerCase();
+  const currentEmail = (authUser?.email || 'english1@simin.hs.kr').toLowerCase();
   const currentName = authUser?.displayName || currentEmail.split('@')[0] || '학습자';
 
   const [myActivity, setMyActivity] = useState<StudentActivity | null>(null);
