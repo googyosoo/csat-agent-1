@@ -2,7 +2,7 @@
  * Real-time Student Analytics & Learning Tracking Engine with Firebase Firestore & LocalStorage Persistence
  */
 
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, doc, setDoc, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { safeFetchJson } from './api';
 
