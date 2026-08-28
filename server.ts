@@ -71,6 +71,32 @@ function getGenAIClient(customApiKey?: string) {
   });
 }
 
+/**
+ * Multi-tier Gemini Model Fallback Pipeline with 10s Execution Limit
+ * 1순위: Gemini-3.7-Flash -> 2순위: Gemini-2.5-Flash -> 3순위: Gemini-2.0-Flash -> 4순위: Gemini-1.5-Flash -> 5순위: Gemini-1.5-Pro
+ */
+async function callGemini(ai: any, contents: any, config: any, tier: 'flash' | 'pro' = 'flash') {
+  const models = tier === 'pro'
+    ? ['gemini-3.7-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash']
+    : ['gemini-3.7-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+
+  let lastErr: any = null;
+  for (const model of models) {
+    try {
+      const generatePromise = ai.models.generateContent({ model, contents, config });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Model ${model} execution timed out (10s limit)`)), 10000)
+      );
+      const response: any = await Promise.race([generatePromise, timeoutPromise]);
+      if (response && response.text) return response;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[Gemini API] Model ${model} fallback triggered:`, err?.message);
+    }
+  }
+  throw lastErr || new Error('All model fallbacks failed');
+}
+
 // Helper function to build passage-specific analysis fallback
 function buildPassageSpecificFallback(body: any) {
   const { passage, lesson, itemNo, title, type, translation, explanation, syntaxNotes, vocabList } = body;
@@ -1609,7 +1635,9 @@ ${cleanPassage}`;
 });
 
 /* ──────── Central Student Analytics File-Backed Store & REST APIs ──────── */
-const DATA_FILE_PATH = path.join(process.cwd(), 'data_analytics_store.json');
+const DATA_FILE_PATH = process.env.VERCEL
+  ? path.join('/tmp', 'data_analytics_store.json')
+  : path.join(process.cwd(), 'data_analytics_store.json');
 
 interface AnalyticsStore {
   students: any[];

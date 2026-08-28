@@ -47,6 +47,17 @@ export interface StudentReflection {
   timestamp: string;
 }
 
+/**
+ * 0ms Event-Driven Dispatcher for Instant Dashboard Reactivity
+ */
+export function notifyAnalyticsUpdated() {
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('csat_analytics_updated'));
+    } catch (e) {}
+  }
+}
+
 export interface AnalyticsMetrics {
   totalStudents: number;
   totalLogins: number;
@@ -330,6 +341,8 @@ export function recordSocraticQuestion(data: {
     const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
     setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
   } catch (e) {}
+
+  notifyAnalyticsUpdated();
 }
 
 /**
@@ -350,6 +363,8 @@ export function recordGeneratorUsage(studentEmail?: string | null, studentName?:
     const docId = students[idx].email.replace(/[^a-zA-Z0-9]/g, '_');
     setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
   } catch (e) {}
+
+  notifyAnalyticsUpdated();
 }
 
 /**
@@ -362,6 +377,7 @@ export function clearAnalyticsData(): void {
     localStorage.removeItem(STORAGE_KEY_REFLECTIONS);
     localStorage.removeItem(STORAGE_KEY_EVENTS);
   } catch (e) {}
+  notifyAnalyticsUpdated();
 }
 
 /**
@@ -431,6 +447,7 @@ export function recordStudentReflection(data: {
     setDoc(doc(db, 'students', docId), students[idx], { merge: true }).catch(() => {});
   } catch (e) {}
 
+  notifyAnalyticsUpdated();
   return newReflection;
 }
 
