@@ -217,8 +217,8 @@ export default function App() {
             </p>
             <div className="text-[11px] text-slate-400 space-y-1 text-left bg-slate-950/50 p-3 rounded-xl border border-slate-800">
               <div className="font-bold text-slate-300">💡 로그인 허용 정책:</div>
-              <div>• <strong>일반 학습자(학생)</strong>: <code className="text-cyan-300 font-mono">@simin.hs.kr</code> 계정 전용</div>
-              <div>• <strong>지정 관리자</strong>: 지정 이메일 3개 계정 허용 (도메인 무관)</div>
+              <div>• <strong>일반 학습자(학생)</strong>: Google 계정 전체 허용</div>
+              <div>• <strong>지정 관리자</strong>: 지정 이메일 2개 계정 (sitech3@simin.hs.kr, hongjinwoo@simin.hs.kr)</div>
             </div>
             <button
               onClick={() => setDeniedReason(null)}

@@ -16,10 +16,13 @@ import { safeFetchJson } from '../lib/api';
 
 /* ──────── Error Boundary ──────── */
 interface EBState { hasError: boolean; error: Error | null }
-class DashboardErrorBoundary extends Component<{ children: ReactNode }, EBState> {
-  state: EBState = { hasError: false, error: null };
-  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
-  componentDidCatch(error: Error, info: ErrorInfo) { console.error('[AdminDashboard ErrorBoundary]', error, info); }
+class DashboardErrorBoundary extends (React.Component as new (props: any) => any) {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error): EBState { return { hasError: true, error }; }
+  componentDidCatch(error: Error, info: any) { console.error('[AdminDashboard ErrorBoundary]', error, info); }
   render() {
     if (this.state.hasError) {
       return (
@@ -431,7 +434,7 @@ const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => 
             <i className="fa-solid fa-user-clock text-3xl text-purple-400/40"></i>
             <p className="text-xs font-semibold text-slate-300">현재 누적된 학생 학습 활동 데이터가 없습니다.</p>
             <p className="text-[11px] text-slate-500">
-              학생들이 Google 계정(@simin.hs.kr)으로 로그인하면 실시간으로 접속 시각, 체류시간 및 학습 이력이 이곳에 기록됩니다.
+              학생들이 Google 계정으로 로그인하면 실시간으로 접속 시각, 체류시간 및 학습 이력이 이곳에 기록됩니다.
             </p>
           </div>
         ) : (

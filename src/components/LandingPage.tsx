@@ -23,15 +23,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSucces
           if (onSuccessLogin) onSuccessLogin(user);
           return;
         } else {
-          alert(access.reason || '@simin.hs.kr 계정만 접근 가능합니다.');
+          alert(access.reason || 'Google 계정으로 로그인해 주세요.');
           return;
         }
       }
     } catch (err: any) {
       console.warn('[LandingPage Google Login Error - Fallback triggered]:', err?.message);
       const emailInput = window.prompt(
-        '심인고등학교 구글 계정 이메일(@simin.hs.kr)을 입력해 주세요:',
-        'english1@simin.hs.kr'
+        'Google 계정 이메일을 입력해 주세요:',
+        'student@gmail.com'
       );
       if (emailInput && emailInput.trim().length > 0) {
         const cleanEmail = emailInput.trim().toLowerCase();
@@ -42,7 +42,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSucces
           if (onSuccessLogin) onSuccessLogin(fallbackUser);
           return;
         } else {
-          alert('접근 제한: 심인고등학교 계정(@simin.hs.kr)만 로그인할 수 있습니다.');
+          alert('접근 제한: 유효한 구글 이메일을 입력해 주세요.');
         }
       }
     } finally {
@@ -83,7 +83,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSucces
         {/* Top Announcement Badge */}
         <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-blue-950/80 border border-blue-500/40 text-blue-300 text-xs font-semibold shadow-inner">
           <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-          <span>심인고등학교 학생 전용 (@simin.hs.kr) 공식 AI 학습 게이트</span>
+          <span>공식 AI 수능 영어 학습 게이트 (모든 구글 계정 이용 가능)</span>
         </div>
 
         {/* Hero Headline */}
@@ -122,7 +122,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ deniedReason, onSucces
             <span>{isLoggingIn ? '인증 진행 중...' : 'Google 계정으로 로그인'}</span>
           </button>
           <span className="text-[11px] text-slate-400 font-mono">
-            🔒 @simin.hs.kr 전용 계정만 가능
+            ✨ 모든 구글 계정으로 즉시 로그인 가능
           </span>
         </div>
 

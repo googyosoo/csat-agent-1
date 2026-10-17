@@ -19,12 +19,12 @@ export function isAdminUser(email?: string | null): boolean {
 }
 
 /**
- * Check if the given email belongs to an allowed student domain (@simin.hs.kr).
+ * Check if the given email is valid for student access (모든 구글 계정 접근 허용).
  */
 export function isAllowedStudentDomain(email?: string | null): boolean {
   if (!email) return false;
   const cleanEmail = email.trim().toLowerCase();
-  return cleanEmail.endsWith(ALLOWED_STUDENT_DOMAIN.toLowerCase());
+  return cleanEmail.includes('@');
 }
 
 export interface AccessCheckResult {
@@ -36,11 +36,10 @@ export interface AccessCheckResult {
 /**
  * Validate overall access permission for the logged-in user:
  * 1. Designated admins (sitech3@simin.hs.kr, hongjinwoo@simin.hs.kr): Allowed with 'admin' role.
- * 2. Students with '@simin.hs.kr' domain: Allowed with 'student' role.
- * 3. Other domains: Denied.
+ * 2. All Google accounts (@simin.hs.kr 및 일반 구글 계정 전체): Allowed with 'student' role.
  */
 export function validateUserAccess(email?: string | null): AccessCheckResult {
-  if (!email) {
+  if (!email || !email.trim()) {
     return { allowed: false, role: 'denied', reason: '로그인이 필요합니다.' };
   }
 
@@ -49,15 +48,6 @@ export function validateUserAccess(email?: string | null): AccessCheckResult {
     return { allowed: true, role: 'admin' };
   }
 
-  // 2. Check if student email has @simin.hs.kr domain
-  if (isAllowedStudentDomain(email)) {
-    return { allowed: true, role: 'student' };
-  }
-
-  // 3. Deny all other domains
-  return {
-    allowed: false,
-    role: 'denied',
-    reason: `접근 제한: 심인고등학교 전용 서비스입니다. @simin.hs.kr 도메인 계정으로 로그인해 주세요.`,
-  };
+  // 2. All valid Google accounts are allowed as students
+  return { allowed: true, role: 'student' };
 }

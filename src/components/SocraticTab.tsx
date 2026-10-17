@@ -192,7 +192,7 @@ export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, custo
             <span>🔒 소크라테스 AI 튜터 3단계 힌트 질의응답은 Google 로그인 후 이용 가능합니다.</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            우측 상단 <strong className="text-blue-400">Google 로그인</strong> 후 질문을 입력해 주세요. (@simin.hs.kr 학생 전용)
+            우측 상단 <strong className="text-blue-400">Google 로그인</strong> 후 질문을 입력해 주세요.
           </p>
         </div>
       ) : (

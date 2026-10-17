@@ -51,15 +51,15 @@ export const Header: React.FC<HeaderProps> = ({
           if (onSuccessLogin) onSuccessLogin(user);
           return;
         } else {
-          alert(access.reason || '@simin.hs.kr 계정만 접근 가능합니다.');
+          alert(access.reason || 'Google 계정으로 로그인해 주세요.');
           return;
         }
       }
     } catch (err: any) {
       console.warn('[Header Google Login Error - Fallback triggered]:', err?.message);
       const emailInput = window.prompt(
-        '심인고등학교 구글 계정 이메일(@simin.hs.kr)을 입력해 주세요:',
-        'english1@simin.hs.kr'
+        'Google 계정 이메일을 입력해 주세요:',
+        'student@gmail.com'
       );
       if (emailInput && emailInput.trim().length > 0) {
         const cleanEmail = emailInput.trim().toLowerCase();
@@ -70,7 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
           if (onSuccessLogin) onSuccessLogin(fallbackUser);
           return;
         } else {
-          alert('접근 제한: 심인고등학교 계정(@simin.hs.kr)만 로그인할 수 있습니다.');
+          alert('접근 제한: 유효한 구글 이메일을 입력해 주세요.');
         }
       }
     } finally {
@@ -215,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={handleGoogleLoginClick}
                 disabled={isLoggingIn}
                 className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-[11px] sm:text-xs flex items-center space-x-1.5 transition-all shadow-md shadow-blue-900/30 disabled:opacity-50 shrink-0"
-                title="Google 계정 로그인 (@simin.hs.kr 전용)"
+                title="Google 계정 로그인"
               >
                 <i className={`fa-brands fa-google text-xs ${isLoggingIn ? 'fa-spin' : ''}`}></i>
                 <span>{isLoggingIn ? '인증중...' : 'Google 로그인'}</span>
