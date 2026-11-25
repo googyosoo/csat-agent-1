@@ -38,7 +38,10 @@ function shuffleTransformOptions(data, questionType) {
   };
 }
 function getGenAIClient(customApiKey) {
-  const apiKey = customApiKey && typeof customApiKey === "string" && customApiKey.trim().length > 0 ? customApiKey.trim() : process.env.GEMINI_API_KEY || "dummy_gemini_api_key_for_fallback_engine";
+  const apiKey = customApiKey && typeof customApiKey === "string" && customApiKey.trim().length > 0 ? customApiKey.trim() : (process.env.GEMINI_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY\uAC00 \uC785\uB825\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC0C1\uB2E8 BYOK \uD0A4 \uC124\uC815\uC5D0\uC11C Gemini API \uD0A4\uB97C \uC785\uB825\uD574 \uC8FC\uC138\uC694.");
+  }
   return new GoogleGenAI({
     apiKey,
     httpOptions: {
@@ -47,6 +50,24 @@ function getGenAIClient(customApiKey) {
       }
     }
   });
+}
+async function callGemini(ai, contents, config, _tier = "flash") {
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+  let lastErr = null;
+  for (const model of models) {
+    try {
+      const generatePromise = ai.models.generateContent({ model, contents, config });
+      const timeoutPromise = new Promise(
+        (_, reject) => setTimeout(() => reject(new Error(`Model ${model} execution timed out (10s limit)`)), 1e4)
+      );
+      const response = await Promise.race([generatePromise, timeoutPromise]);
+      if (response && response.text) return response;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[Gemini API] Model ${model} fallback triggered:`, err?.message);
+    }
+  }
+  throw lastErr || new Error("All model fallbacks failed");
 }
 function buildPassageSpecificFallback(body) {
   const { passage, lesson, itemNo, title, type, translation, explanation, syntaxNotes, vocabList } = body;
@@ -173,14 +194,10 @@ app.post("/api/gemini/analyze", async (req, res) => {
     const ai = getGenAIClient(customApiKey);
     const systemPrompt = `You are a team of expert AI CSAT English Agents. Analyze the EBS English passage and return JSON matching schema. Respond in Korean.`;
     const userPrompt = `Passage (${displayLesson} ${displayItemNo}: ${title || ""}): ${passage ? passage.slice(0, 700) : ""}`;
-    const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: analyzeResponseSchema
-      }
+    const response = await callGemini(ai, userPrompt, {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json",
+      responseSchema: analyzeResponseSchema
     });
     responseText = response.text || "";
     if (!responseText) throw new Error("Empty response from Gemini model");
@@ -253,14 +270,10 @@ ${explanation || ""}
 
 Syntax Notes:
 ${Array.isArray(syntaxNotes) ? syntaxNotes.join("\n") : ""}`;
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: analyzeResponseSchema
-      }
+    const response = await callGemini(ai, userPrompt, {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json",
+      responseSchema: analyzeResponseSchema
     });
     const responseText = response.text;
     if (!responseText) throw new Error("Empty response from Gemini model");
@@ -355,7 +368,7 @@ function buildTransformFallback(body) {
     return {
       type: "\uBB38\uC7A5 \uC0BD\uC785",
       difficulty,
-      question: `[${displayLesson} ${displayItemNo}] \uAE00\uC758 \uD750\uB984\uC73C\uB85C \uBCF4\uC544, \uC8FC\uC5B4\uC9C4 \uBB38\uC7A5\uC774 \uB4E4\uC5B4\uAC00\uC9C0\uC5D0 \uAC00\uC7A5 \uC801\uC808\uD55C \uACF3\uC740?`,
+      question: `[${displayLesson} ${displayItemNo}] \uAE00\uC758 \uD750\uB984\uC73C\uB85C \uBCF4\uC544, \uC8FC\uC5B4\uC9C4 \uBB38\uC7A5\uC774 \uB4E4\uC5B4\uAC00\uAE30\uC5D0 \uAC00\uC7A5 \uC801\uC808\uD55C \uACF3\uC740?`,
       modifiedPassage: `[ \uC8FC\uC5B4\uC9C4 \uBB38\uC7A5 ]
 "${insertedSentence}"
 
@@ -724,20 +737,10 @@ ${passage}
 
 Target Question Type: ${targetQuestionType}
 Difficulty Level: ${difficulty}`;
-    const fetchAiWithTimeout = Promise.race([
-      ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: userPrompt,
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: "application/json"
-        }
-      }),
-      new Promise(
-        (_, reject) => setTimeout(() => reject(new Error("AI response timeout (2.5s limit reached)")), 2500)
-      )
-    ]);
-    const response = await fetchAiWithTimeout;
+    const response = await callGemini(ai, userPrompt, {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json"
+    });
     const responseText = response.text || "";
     const json = JSON.parse(cleanJsonString(responseText));
     const formattedData = {
@@ -933,13 +936,8 @@ RULES:
       role: m.role === "user" ? "user" : "model",
       parts: [{ text: m.text }]
     }));
-    const selectedModel = hintLevel === 3 ? "gemini-3.6-flash" : "gemini-1.5-flash";
-    const response = await ai.models.generateContent({
-      model: selectedModel,
-      contents,
-      config: {
-        systemInstruction: systemPrompt
-      }
+    const response = await callGemini(ai, contents, {
+      systemInstruction: systemPrompt
     });
     res.json({ success: true, text: response.text || "\uB2F5\uBCC0\uC744 \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4." });
   } catch (error) {
@@ -1165,7 +1163,8 @@ Include clear logical flow nodes, main educational metaphor elements, clean typo
   });
 });
 app.post("/api/gemini/ingest", async (req, res) => {
-  const { passageText, lesson, itemNo, customApiKey } = req.body;
+  const passageText = req.body?.rawText || req.body?.passageText || "";
+  const { lesson, itemNo, customApiKey } = req.body;
   try {
     const ai = getGenAIClient(customApiKey);
     const systemPrompt = `You are an expert EBS English curriculum processor. Analyze the raw English passage provided by the user and extract metadata in JSON format.
@@ -1180,14 +1179,10 @@ JSON schema:
   "syntaxNotes": ["syntax note 1", "syntax note 2"],
   "vocabList": [{"word": "englishWord", "meaning": "koreanMeaning"}]
 }`;
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: `Passage:
-${passageText}`,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json"
-      }
+    const response = await callGemini(ai, `Passage (${lesson || ""} ${itemNo || ""}):
+${passageText}`, {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json"
     });
     const responseText = response.text;
     if (!responseText) throw new Error("Failed to parse passage");
@@ -1220,22 +1215,6 @@ ${passageText}`,
     };
     res.json({ success: true, data: fallbackData, fallback: true });
   }
-});
-app.use("/api/*", (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: `\uC694\uCCAD\uD558\uC2E0 API \uC5D4\uB4DC\uD3EC\uC778\uD2B8(${req.originalUrl})\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.`
-  });
-});
-app.use((err, req, res, next) => {
-  console.error("Global Express Error:", err);
-  if (req.originalUrl && req.originalUrl.startsWith("/api")) {
-    return res.status(500).json({
-      success: false,
-      error: err?.message || "\uC11C\uBC84 \uB0B4\uBD80 \uCC98\uB9AC \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4."
-    });
-  }
-  next(err);
 });
 var studentReportSchema = {
   type: Type.OBJECT,
@@ -1284,14 +1263,10 @@ Analyze the following student's learning data and generate a personalized learni
 Respond ONLY with JSON matching the required schema.`;
   try {
     const ai = getGenAIClient(customApiKey);
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: studentReportSchema,
-        temperature: 0.3
-      }
+    const response = await callGemini(ai, [{ role: "user", parts: [{ text: prompt }] }], {
+      responseMimeType: "application/json",
+      responseSchema: studentReportSchema,
+      temperature: 0.3
     });
     const responseText = response.text;
     if (!responseText) throw new Error("Empty response from Gemini");
@@ -1501,6 +1476,25 @@ app.post("/api/analytics/reflection", (req, res) => {
 });
 app.get("/api/analytics/reflections", (req, res) => {
   res.json({ success: true, data: centralStore.reflections });
+});
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, service: "csat-agent-1", freeTierModel: "gemini-2.5-flash" });
+});
+app.use("/api/*", (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `\uC694\uCCAD\uD558\uC2E0 API \uC5D4\uB4DC\uD3EC\uC778\uD2B8(${req.originalUrl})\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.`
+  });
+});
+app.use((err, req, res, next) => {
+  console.error("Global Express Error:", err);
+  if (req.originalUrl && req.originalUrl.startsWith("/api")) {
+    return res.status(500).json({
+      success: false,
+      error: err?.message || "\uC11C\uBC84 \uB0B4\uBD80 \uCC98\uB9AC \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4."
+    });
+  }
+  next(err);
 });
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

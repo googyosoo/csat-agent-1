@@ -1424,26 +1424,6 @@ JSON schema:
   }
 });
 
-// Explicit API 404 handler for unknown /api requests (returns JSON, never HTML)
-app.use('/api/*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: `요청하신 API 엔드포인트(${req.originalUrl})를 찾을 수 없습니다.`
-  });
-});
-
-// Global API Error Handler (ensures errors in /api routes return JSON, never HTML)
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Global Express Error:', err);
-  if (req.originalUrl && req.originalUrl.startsWith('/api')) {
-    return res.status(500).json({
-      success: false,
-      error: err?.message || '서버 내부 처리 중 오류가 발생했습니다.'
-    });
-  }
-  next(err);
-});
-
 // Response Schema for Student AI Feedback & Setek (School Record) Report
 const studentReportSchema = {
   type: Type.OBJECT,
@@ -1750,6 +1730,30 @@ app.post('/api/analytics/reflection', (req, res) => {
 // API 6: Get Student Reflections
 app.get('/api/analytics/reflections', (req, res) => {
   res.json({ success: true, data: centralStore.reflections });
+});
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'csat-agent-1', freeTierModel: 'gemini-2.5-flash' });
+});
+
+// Explicit API 404 handler for unknown /api requests (returns JSON, never HTML)
+app.use('/api/*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `요청하신 API 엔드포인트(${req.originalUrl})를 찾을 수 없습니다.`
+  });
+});
+
+// Global API Error Handler (ensures errors in /api routes return JSON, never HTML)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Global Express Error:', err);
+  if (req.originalUrl && req.originalUrl.startsWith('/api')) {
+    return res.status(500).json({
+      success: false,
+      error: err?.message || '서버 내부 처리 중 오류가 발생했습니다.'
+    });
+  }
+  next(err);
 });
 
 async function startServer() {
