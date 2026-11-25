@@ -26,15 +26,34 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('library');
   const [selectedPassage, setSelectedPassage] = useState<EBSPassage>(INITIAL_EBS_DATASET[0]);
   const [filterLesson, setFilterLesson] = useState('ALL');
-  const [customApiKey, setCustomApiKey] = useState('');
+  const [customApiKey, setCustomApiKeyState] = useState(() => {
+    try {
+      return localStorage.getItem('csat_byok_gemini_key') || '';
+    } catch {
+      return '';
+    }
+  });
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [showIngestModal, setShowIngestModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [deniedReason, setDeniedReason] = useState<string | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('csat_theme_mode') as 'dark' | 'light') || 'dark';
   });
+
+  const setCustomApiKey = (key: string) => {
+    const trimmed = key.trim();
+    setCustomApiKeyState(trimmed);
+    try {
+      if (trimmed) {
+        localStorage.setItem('csat_byok_gemini_key', trimmed);
+      } else {
+        localStorage.removeItem('csat_byok_gemini_key');
+      }
+    } catch {}
+  };
 
   const isAdmin = authUser ? isAdminUser(authUser.email) : false;
 
@@ -97,13 +116,25 @@ export default function App() {
     setSelectedPassage(newPassage);
   };
 
-  // If not logged in, render First-screen Entrance Landing Page
-  if (!authUser) {
-    return <LandingPage deniedReason={deniedReason} onSuccessLogin={(u) => setAuthUser(u)} />;
+  // If not logged in and not in guest preview mode, render First-screen Entrance Landing Page
+  if (!authUser && !isGuestMode) {
+    return (
+      <LandingPage
+        deniedReason={deniedReason}
+        onSuccessLogin={(u) => {
+          setIsGuestMode(false);
+          setAuthUser(u);
+        }}
+        onEnterGuest={() => {
+          setIsGuestMode(true);
+          setActiveTab('library');
+        }}
+      />
+    );
   }
 
   return (
-    <div className={`flex h-screen overflow-hidden bg-slate-950 text-slate-100 font-sans transition-all ${theme === 'light' ? 'theme-light' : ''}`}>
+    <div className={`flex min-h-[100dvh] md:h-screen md:overflow-hidden bg-slate-950 text-slate-100 font-sans transition-all ${theme === 'light' ? 'theme-light' : ''}`}>
       {/* Sidebar (Mobile Responsive Drawer) */}
       <Sidebar
         activeTab={activeTab}
@@ -118,6 +149,7 @@ export default function App() {
           setShowIngestModal(true);
         }}
         authUser={authUser}
+        isGuestMode={isGuestMode}
         isMobileOpen={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         selectedSubjectId={selectedSubjectId}
@@ -125,7 +157,7 @@ export default function App() {
       />
 
       {/* Main Workspace */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-950">
+      <main className="flex-1 flex flex-col min-w-0 min-h-[100dvh] md:h-screen md:overflow-hidden bg-slate-950">
         <Header
           selectedPassage={selectedPassage}
           isSpeaking={isSpeaking}
@@ -134,13 +166,18 @@ export default function App() {
           customApiKey={customApiKey}
           setCustomApiKey={setCustomApiKey}
           authUser={authUser}
+          isGuestMode={isGuestMode}
+          onExitGuest={() => setIsGuestMode(false)}
           theme={theme}
           onToggleTheme={handleToggleTheme}
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           isAdmin={isAdmin}
-          onSuccessLogin={(u) => setAuthUser(u)}
+          onSuccessLogin={(u) => {
+            setIsGuestMode(false);
+            setAuthUser(u);
+          }}
         />
 
         {/* Tab Content */}
@@ -148,6 +185,7 @@ export default function App() {
           {activeTab === 'mylearning' && (
             <MyLearningTab
               dataset={dataset}
+              authUser={authUser}
               onSelectPassage={(passageId) => {
                 const found = dataset.find((p) => p.id === passageId);
                 if (found) {
@@ -160,6 +198,7 @@ export default function App() {
           {activeTab === 'library' && (
             <LibraryTab
               selectedPassage={selectedPassage}
+              authUser={authUser}
               isSpeaking={isSpeaking}
               onSpeak={speakText}
               onStopSpeak={stopSpeaking}
@@ -177,7 +216,7 @@ export default function App() {
           {activeTab === 'vocab' && <VocabTab selectedPassage={selectedPassage} onSpeak={speakText} />}
           {activeTab === 'admin' && (
             isAdmin ? (
-              <AdminDashboardTab authUser={authUser} />
+              <AdminDashboardTab authUser={authUser} customApiKey={customApiKey} />
             ) : (
               <StudentDashboardTab
                 authUser={authUser}

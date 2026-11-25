@@ -59,7 +59,11 @@ function shuffleTransformOptions(data: any, questionType?: string): any {
 function getGenAIClient(customApiKey?: string) {
   const apiKey = (customApiKey && typeof customApiKey === 'string' && customApiKey.trim().length > 0)
     ? customApiKey.trim()
-    : (process.env.GEMINI_API_KEY || 'dummy_gemini_api_key_for_fallback_engine');
+    : (process.env.GEMINI_API_KEY || '').trim();
+
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY가 입력되지 않았습니다. 상단 BYOK 키 설정에서 Gemini API 키를 입력해 주세요.');
+  }
 
   return new GoogleGenAI({
     apiKey,
@@ -72,13 +76,10 @@ function getGenAIClient(customApiKey?: string) {
 }
 
 /**
- * Multi-tier Gemini Model Fallback Pipeline with 10s Execution Limit
- * 1순위: Gemini-3.7-Flash -> 2순위: Gemini-2.5-Flash -> 3순위: Gemini-2.0-Flash -> 4순위: Gemini-1.5-Flash -> 5순위: Gemini-1.5-Pro
+ * Multi-tier Gemini Free-Tier Model Fallback Pipeline with 10s Execution Limit
  */
-async function callGemini(ai: any, contents: any, config: any, tier: 'flash' | 'pro' = 'flash') {
-  const models = tier === 'pro'
-    ? ['gemini-3.7-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash']
-    : ['gemini-3.7-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+async function callGemini(ai: any, contents: any, config: any, _tier: 'flash' | 'pro' = 'flash') {
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
   let lastErr: any = null;
   for (const model of models) {
@@ -252,15 +253,11 @@ app.post('/api/gemini/analyze', async (req, res) => {
     const systemPrompt = `You are a team of expert AI CSAT English Agents. Analyze the EBS English passage and return JSON matching schema. Respond in Korean.`;
     const userPrompt = `Passage (${displayLesson} ${displayItemNo}: ${title || ''}): ${passage ? passage.slice(0, 700) : ''}`;
 
-    // Strategy 2: Model Tiering - gemini-1.5-flash for fast analysis (90% cost reduction)
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-        responseSchema: analyzeResponseSchema,
-      },
+    // Strategy 2: Free-tier Gemini model
+    const response = await callGemini(ai, userPrompt, {
+      systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
+      responseSchema: analyzeResponseSchema,
     });
 
     responseText = response.text || '';
@@ -346,14 +343,10 @@ ${explanation || ''}
 Syntax Notes:
 ${Array.isArray(syntaxNotes) ? syntaxNotes.join('\n') : ''}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-        responseSchema: analyzeResponseSchema,
-      },
+    const response = await callGemini(ai, userPrompt, {
+      systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
+      responseSchema: analyzeResponseSchema,
     });
 
     const responseText = response.text;
@@ -471,7 +464,7 @@ function buildTransformFallback(body: any) {
     return {
       type: '문장 삽입',
       difficulty,
-      question: `[${displayLesson} ${displayItemNo}] 글의 흐름으로 보아, 주어진 문장이 들어가지에 가장 적절한 곳은?`,
+      question: `[${displayLesson} ${displayItemNo}] 글의 흐름으로 보아, 주어진 문장이 들어가기에 가장 적절한 곳은?`,
       modifiedPassage: `[ 주어진 문장 ]\n"${insertedSentence}"\n\n${formattedBody.trim()}`,
       options: ["①", "②", "③", "④", "⑤"],
       correctIndex: 1,
@@ -872,21 +865,10 @@ ${passage}
 Target Question Type: ${targetQuestionType}
 Difficulty Level: ${difficulty}`;
 
-    const fetchAiWithTimeout = Promise.race([
-      ai.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: userPrompt,
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: 'application/json',
-        },
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI response timeout (2.5s limit reached)')), 2500)
-      ),
-    ]);
-
-    const response = await fetchAiWithTimeout;
+    const response = await callGemini(ai, userPrompt, {
+      systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
+    });
     const responseText = response.text || '';
     const json = JSON.parse(cleanJsonString(responseText));
     const formattedData = {
@@ -1112,15 +1094,9 @@ RULES:
       parts: [{ text: m.text }],
     }));
 
-    // Strategy 2: Model Tiering (1.5-flash for Hint Level 1/2, 3.6-flash for Level 3)
-    const selectedModel = (hintLevel === 3) ? 'gemini-3.6-flash' : 'gemini-1.5-flash';
-
-    const response = await ai.models.generateContent({
-      model: selectedModel,
-      contents,
-      config: {
-        systemInstruction: systemPrompt,
-      },
+    // Strategy 2: Free-Tier Gemini model with fallback
+    const response = await callGemini(ai, contents, {
+      systemInstruction: systemPrompt,
     });
 
     res.json({ success: true, text: response.text || '답변을 생성하지 못했습니다.' });
@@ -1391,7 +1367,8 @@ Include clear logical flow nodes, main educational metaphor elements, clean typo
 
 // 5. Ingest New Passage
 app.post('/api/gemini/ingest', async (req, res) => {
-  const { passageText, lesson, itemNo, customApiKey } = req.body;
+  const passageText = req.body?.rawText || req.body?.passageText || '';
+  const { lesson, itemNo, customApiKey } = req.body;
   try {
     const ai = getGenAIClient(customApiKey);
 
@@ -1408,13 +1385,9 @@ JSON schema:
   "vocabList": [{"word": "englishWord", "meaning": "koreanMeaning"}]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: `Passage:\n${passageText}`,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-      },
+    const response = await callGemini(ai, `Passage (${lesson || ''} ${itemNo || ''}):\n${passageText}`, {
+      systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
     });
 
     const responseText = response.text;
@@ -1524,14 +1497,10 @@ Respond ONLY with JSON matching the required schema.`;
 
   try {
     const ai = getGenAIClient(customApiKey);
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: studentReportSchema,
-        temperature: 0.3,
-      },
+    const response = await callGemini(ai, [{ role: 'user', parts: [{ text: prompt }] }], {
+      responseMimeType: 'application/json',
+      responseSchema: studentReportSchema,
+      temperature: 0.3,
     });
 
     const responseText = response.text;

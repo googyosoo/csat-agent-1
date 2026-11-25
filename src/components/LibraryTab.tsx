@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { EBSPassage } from '../types';
 import { recordStudentReflection, recordLearningEvent } from '../lib/analytics';
-import { auth } from '../lib/firebase';
+import { auth, User } from '../lib/firebase';
 
 interface LibraryTabProps {
   selectedPassage: EBSPassage;
+  authUser?: User | null;
   isSpeaking?: boolean;
   onSpeak?: (text: string) => void;
   onStopSpeak?: () => void;
@@ -12,10 +13,14 @@ interface LibraryTabProps {
 
 export const LibraryTab: React.FC<LibraryTabProps> = ({
   selectedPassage,
+  authUser,
   isSpeaking = false,
   onSpeak,
   onStopSpeak,
 }) => {
+  const activeEmail = authUser?.email || auth.currentUser?.email || 'guest@simin.hs.kr';
+  const activeName = authUser?.displayName || auth.currentUser?.displayName || '게스트 학습자';
+  const isLoggedIn = Boolean(authUser || auth.currentUser);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [reflectionInput, setReflectionInput] = useState('');
   const [isSavedReflection, setIsSavedReflection] = useState(false);
@@ -32,30 +37,28 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
   const handleSelectOption = (idx: number) => {
     setSelectedOption(idx);
-    if (auth.currentUser?.email) {
-      recordLearningEvent({
-        studentEmail: auth.currentUser.email,
-        studentName: auth.currentUser.displayName || undefined,
-        subject: '진로영어',
-        passageId: selectedPassage.id,
-        lesson: selectedPassage.lesson,
-        itemNo: selectedPassage.itemNo,
-        eventType: 'SOLVE_QUIZ',
-        questionType: selectedPassage.type,
-        difficulty: '수능 표준',
-        selectedIndex: idx,
-        correctIndex: selectedPassage.answerIndex,
-        isCorrect: idx === selectedPassage.answerIndex,
-      });
-    }
+    recordLearningEvent({
+      studentEmail: activeEmail,
+      studentName: activeName,
+      subject: '진로영어',
+      passageId: selectedPassage.id,
+      lesson: selectedPassage.lesson,
+      itemNo: selectedPassage.itemNo,
+      eventType: 'SOLVE_QUIZ',
+      questionType: selectedPassage.type,
+      difficulty: '수능 표준',
+      selectedIndex: idx,
+      correctIndex: selectedPassage.answerIndex,
+      isCorrect: idx === selectedPassage.answerIndex,
+    });
   };
 
   const handleSaveReflection = () => {
-    if (!reflectionInput.trim()) return;
+    if (!reflectionInput.trim() || !isLoggedIn) return;
 
     recordStudentReflection({
-      studentEmail: auth.currentUser?.email,
-      studentName: auth.currentUser?.displayName,
+      studentEmail: activeEmail,
+      studentName: activeName,
       passageId: selectedPassage.id,
       lesson: selectedPassage.lesson,
       itemNo: selectedPassage.itemNo,
@@ -63,19 +66,17 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
       reflectionText: reflectionInput,
     });
 
-    if (auth.currentUser?.email) {
-      recordLearningEvent({
-        studentEmail: auth.currentUser.email,
-        studentName: auth.currentUser.displayName || undefined,
-        subject: '진로영어',
-        passageId: selectedPassage.id,
-        lesson: selectedPassage.lesson,
-        itemNo: selectedPassage.itemNo,
-        eventType: 'STUDENT_REFLECTION',
-        questionType: selectedPassage.type,
-        reasonText: reflectionInput,
-      });
-    }
+    recordLearningEvent({
+      studentEmail: activeEmail,
+      studentName: activeName,
+      subject: '진로영어',
+      passageId: selectedPassage.id,
+      lesson: selectedPassage.lesson,
+      itemNo: selectedPassage.itemNo,
+      eventType: 'STUDENT_REFLECTION',
+      questionType: selectedPassage.type,
+      reasonText: reflectionInput,
+    });
 
     setIsSavedReflection(true);
   };
@@ -174,7 +175,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
               {selectedPassage.type === '요약문 완성' && '다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?'}
               {selectedPassage.type === '무관한 문장' && '다음 글에서 전체 흐름과 관계 없는 문장은?'}
               {selectedPassage.type === '글의 순서' && '주어진 글 다음에 이어질 글의 순서로 가장 적절한 것을 고르시오.'}
-              {selectedPassage.type === '주어진 문장의 위치' && '글의 흐름으로 보아, 주어진 문장이 들어가지에 가장 적절한 곳은?'}
+              {selectedPassage.type === '주어진 문장의 위치' && '글의 흐름으로 보아, 주어진 문장이 들어가기에 가장 적절한 곳은?'}
               {!['빈칸 추론', '요약문 완성', '무관한 문장', '글의 순서', '주어진 문장의 위치'].includes(selectedPassage.type) && '다음 글을 읽고 문항의 정답을 고르시오.'}
             </span>
           </h4>
@@ -333,14 +334,14 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
               </div>
             </div>
 
-            {!auth.currentUser ? (
+            {!isLoggedIn ? (
               <div className="bg-slate-950 p-5 rounded-xl border border-rose-500/40 text-center space-y-2.5">
                 <div className="flex items-center justify-center space-x-2 text-rose-400 font-bold text-xs">
                   <i className="fa-solid fa-lock text-sm"></i>
                   <span>🔒 학생 메타인지 소감 및 생기부 성찰 기록은 Google 로그인 후 작성 가능합니다.</span>
                 </div>
                 <p className="text-xs text-slate-400">
-                  우측 상단의 <strong className="text-blue-400">Google 로그인</strong> 후 소감을 작성하실 수 있습니다.
+                  우측 상단의 <strong className="text-blue-400">로그인</strong> 버튼으로 접속하면 소감을 저장할 수 있습니다.
                 </p>
               </div>
             ) : isSavedReflection ? (
@@ -371,7 +372,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-slate-500">
-                    작성자: {auth.currentUser?.displayName || auth.currentUser?.email || '학습자'}
+                    작성자: {activeName}
                   </span>
 
                   <button

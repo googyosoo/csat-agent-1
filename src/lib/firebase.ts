@@ -10,11 +10,21 @@ import {
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Firebase configuration using Vite environment variables with fallback
+// Firebase configuration using Vite environment variables with safe placeholder fallback
+const rawApiKey = import.meta.env.VITE_FIREBASE_API_KEY || '';
+const rawProjectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || '';
+
+export const isFirebaseConfigured = Boolean(
+  rawApiKey &&
+    rawProjectId &&
+    !rawApiKey.includes('demo') &&
+    !rawProjectId.includes('csat-agent-platform')
+);
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDemoDummyApiKeyForCSATPlatform12345',
+  apiKey: rawApiKey || 'demo-firebase-api-key',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'csat-agent-platform.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'csat-agent-platform',
+  projectId: rawProjectId || 'csat-agent-platform',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'csat-agent-platform.appspot.com',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789012:web:abcdef1234567890',

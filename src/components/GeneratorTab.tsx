@@ -145,7 +145,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
               </select>
             </div>
 
-            {!auth.currentUser ? (
+            {!authUser && !auth.currentUser ? (
               <div className="mt-4 md:mt-auto p-3 bg-slate-950 rounded-xl border border-rose-500/40 text-center space-y-1">
                 <div className="text-xs font-bold text-rose-400 flex items-center justify-center space-x-1.5">
                   <i className="fa-solid fa-lock"></i>
@@ -159,7 +159,7 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
               <button
                 onClick={generateQuestion}
                 disabled={isGenerating}
-                className="mt-4 md:mt-auto px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center space-x-2 disabled:opacity-50 shrink-0"
+                className="mt-4 md:mt-auto px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 shrink-0"
               >
                 <i className={`fa-solid ${isGenerating ? 'fa-spinner fa-spin' : 'fa-gear'}`}></i>
                 <span>{isGenerating ? '생성 중...' : '변형 문제 생성'}</span>
@@ -167,6 +167,20 @@ export const GeneratorTab: React.FC<GeneratorTabProps> = ({ selectedPassage, cus
             )}
           </div>
         </div>
+
+        {!customApiKey && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-950/30 border border-amber-500/30 text-[11px] text-amber-200 flex items-center space-x-2">
+            <i className="fa-solid fa-key text-amber-400 shrink-0"></i>
+            <span>개인 Gemini 무료 키를 사용하려면 상단의 <strong>BYOK 키 설정</strong> 버튼에서 API 키를 입력해 주세요.</span>
+          </div>
+        )}
+
+        {generatorError && (
+          <div className="mb-4 p-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-xs text-rose-200 flex items-center space-x-2">
+            <i className="fa-solid fa-triangle-exclamation text-rose-400 shrink-0"></i>
+            <span>{generatorError}</span>
+          </div>
+        )}
 
         {generatedItem ? (
           <div className="bg-slate-950 p-6 rounded-xl border border-amber-500/30 space-y-5 shadow-2xl">

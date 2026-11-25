@@ -47,6 +47,7 @@ class DashboardErrorBoundary extends (React.Component as new (props: any) => any
 
 interface AdminDashboardTabProps {
   authUser: User | null;
+  customApiKey?: string;
 }
 
 interface StudentReportResult {
@@ -59,7 +60,7 @@ interface StudentReportResult {
 }
 
 /* ──────── Main Dashboard (inner) ──────── */
-const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => {
+const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser, customApiKey }) => {
   const [students, setStudents] = useState<StudentActivity[]>([]);
   const [socSummaries, setSocSummaries] = useState<SocraticSummary[]>([]);
   const [reflections, setReflections] = useState<StudentReflection[]>([]);
@@ -150,6 +151,7 @@ const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => 
     setSelectedStudent(student);
     setIsGeneratingReport(true);
     setReportResult(null);
+    setReportError(null);
     setCopied(false);
 
     const studentSocraticLogs = socSummaries.filter(
@@ -163,6 +165,7 @@ const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => 
         body: JSON.stringify({
           student,
           socraticLogs: studentSocraticLogs,
+          customApiKey,
         }),
       });
 
@@ -188,7 +191,7 @@ const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => 
   // Google Sheets Modal State
   const [showSheetsModal, setShowSheetsModal] = useState(false);
   const [sheetCopied, setSheetCopied] = useState(false);
-  const [previewMode, setPreviewMode] = useState<boolean>(true); // Default to preview mode for full access
+  const [previewMode, setPreviewMode] = useState<boolean>(false);
 
   // Authorization Check
   const isRealAdmin = authUser ? isAdminUser(authUser.email) : false;
@@ -396,7 +399,7 @@ const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => 
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex flex-col justify-between col-span-2 lg:col-span-1">
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg flex flex-col justify-between sm:col-span-2 lg:col-span-1">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-bold">소크라테스 질의</span>
             <i className="fa-solid fa-comments text-rose-400 text-sm"></i>
@@ -651,6 +654,11 @@ const AdminDashboardInner: React.FC<AdminDashboardTabProps> = ({ authUser }) => 
                     {reportResult.schoolRecordSetek}
                   </div>
                 </div>
+              </div>
+            ) : reportError ? (
+              <div className="py-6 px-4 bg-rose-950/40 border border-rose-500/40 rounded-2xl text-center text-rose-300 text-xs space-y-2">
+                <i className="fa-solid fa-triangle-exclamation text-lg text-rose-400"></i>
+                <p>{reportError}</p>
               </div>
             ) : (
               <div className="py-8 text-center text-slate-400 text-xs">

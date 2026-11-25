@@ -20,6 +20,10 @@ export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, custo
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setChatHistory([]);
+  }, [selectedPassage.id]);
+
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, isThinking]);
 
@@ -72,34 +76,36 @@ export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, custo
     }
   };
 
+  const isLoggedIn = Boolean(authUser || auth.currentUser);
+
   return (
-    <div className="max-w-4xl mx-auto space-y-4 flex flex-col h-[calc(100vh-100px)]">
-      <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+    <div className="max-w-4xl mx-auto space-y-4 flex flex-col min-h-[520px] md:h-[calc(100vh-110px)]">
+      <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shrink-0">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl font-bold">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl font-bold shrink-0">
             <i className="fa-solid fa-comments"></i>
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-white">
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-white truncate">
               소크라테스 튜터 ({selectedPassage.lesson} {selectedPassage.itemNo})
             </h3>
             <p className="text-xs text-slate-400">정답을 제시하기보다 유도 질문으로 학생의 독해 및 구문적 추론을 이끌어냅니다.</p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* 3-Step Hint Policy Selector */}
-          <div className="flex items-center space-x-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
             <span className="text-[11px] text-slate-400 font-semibold px-1.5">힌트 정책:</span>
             {[
-              { level: 1, label: '1단계 (문맥 힌트)', color: 'border-emerald-500/40 text-emerald-300 bg-emerald-950/60' },
-              { level: 2, label: '2단계 (구문 힌트)', color: 'border-amber-500/40 text-amber-300 bg-amber-950/60' },
-              { level: 3, label: '3단계 (완전 해설)', color: 'border-purple-500/40 text-purple-300 bg-purple-950/60' },
+              { level: 1, label: '1단계 (문맥)', color: 'border-emerald-500/40 text-emerald-300 bg-emerald-950/60' },
+              { level: 2, label: '2단계 (구문)', color: 'border-amber-500/40 text-amber-300 bg-amber-950/60' },
+              { level: 3, label: '3단계 (해설)', color: 'border-purple-500/40 text-purple-300 bg-purple-950/60' },
             ].map(item => (
               <button
                 key={item.level}
                 onClick={() => setHintLevel(item.level)}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all ${
+                className={`px-2 py-1 text-[11px] font-bold rounded-lg border transition-all ${
                   hintLevel === item.level
                     ? item.color
                     : 'border-slate-800 text-slate-400 hover:text-slate-200'
@@ -185,14 +191,14 @@ export const SocraticTab: React.FC<SocraticTabProps> = ({ selectedPassage, custo
       </div>
 
       {/* Input */}
-      {!auth.currentUser ? (
+      {!isLoggedIn ? (
         <div className="bg-slate-900/90 p-4 rounded-xl border border-rose-500/40 text-center space-y-1 shrink-0">
           <div className="text-xs font-bold text-rose-400 flex items-center justify-center space-x-1.5">
             <i className="fa-solid fa-lock"></i>
             <span>🔒 소크라테스 AI 튜터 3단계 힌트 질의응답은 Google 로그인 후 이용 가능합니다.</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            우측 상단 <strong className="text-blue-400">Google 로그인</strong> 후 질문을 입력해 주세요.
+            우측 상단 <strong className="text-blue-400">로그인</strong> 버튼으로 접속한 뒤 질문을 입력해 주세요.
           </p>
         </div>
       ) : (

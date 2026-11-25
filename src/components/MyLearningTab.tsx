@@ -1,24 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { EBSPassage } from '../types';
 import { getStoredLearningEvents, LearningEvent } from '../lib/analytics';
-import { auth } from '../lib/firebase';
+import { auth, User } from '../lib/firebase';
 
 interface MyLearningTabProps {
   onSelectPassage: (passageId: string) => void;
   dataset: EBSPassage[];
+  authUser?: User | null;
 }
 
-export const MyLearningTab: React.FC<MyLearningTabProps> = ({ onSelectPassage, dataset }) => {
+export const MyLearningTab: React.FC<MyLearningTabProps> = ({ onSelectPassage, dataset, authUser }) => {
   const [events, setEvents] = useState<LearningEvent[]>([]);
+  const activeEmail = (authUser?.email || auth.currentUser?.email || 'guest@simin.hs.kr').toLowerCase();
+  const activeName = authUser?.displayName || auth.currentUser?.displayName || (authUser || auth.currentUser ? activeEmail.split('@')[0] : '게스트 학습자');
+
+  const loadEvents = useCallback(() => {
+    const allEvents = getStoredLearningEvents();
+    setEvents(allEvents.filter((e) => (e.studentEmail || '').toLowerCase() === activeEmail));
+  }, [activeEmail]);
 
   useEffect(() => {
-    const allEvents = getStoredLearningEvents();
-    if (auth.currentUser?.email) {
-      setEvents(allEvents.filter((e) => e.studentEmail === auth.currentUser?.email));
-    } else {
-      setEvents(allEvents);
-    }
-  }, []);
+    loadEvents();
+    window.addEventListener('csat_analytics_updated', loadEvents);
+    return () => window.removeEventListener('csat_analytics_updated', loadEvents);
+  }, [loadEvents]);
 
   const quizEvents = events.filter((e) => e.eventType === 'SOLVE_QUIZ');
   const totalSolved = quizEvents.length;
@@ -46,7 +51,7 @@ export const MyLearningTab: React.FC<MyLearningTabProps> = ({ onSelectPassage, d
             <span>S5 개인화 맞춤학습 & AI 오답노트</span>
           </div>
           <h2 className="text-xl font-extrabold text-white">
-            {auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || '학습자'} 님의 수능 독해 약점 분석 리포트
+            {activeName} 님의 수능 독해 약점 분석 리포트
           </h2>
           <p className="text-xs text-slate-300 mt-1">
             누적 학습 데이터 기반 오답률 분석 및 생기부 세특 자산 축적현황입니다.

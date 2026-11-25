@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 
@@ -7,6 +9,9 @@ dotenv.config();
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+
+const FREE_TIER_GEMINI_MODEL = 'gemini-2.5-flash';
+const FREE_TIER_FALLBACK_MODEL = 'gemini-2.0-flash';
 
 function cleanJsonString(str: string): string {
   if (!str) return '';
@@ -22,12 +27,32 @@ function cleanJsonString(str: string): string {
 function getGenAIClient(customApiKey?: string) {
   const apiKey = (customApiKey && typeof customApiKey === 'string' && customApiKey.trim().length > 0)
     ? customApiKey.trim()
-    : (process.env.GEMINI_API_KEY || 'dummy_gemini_api_key');
+    : (process.env.GEMINI_API_KEY || '').trim();
+
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY가 입력되지 않았습니다. 상단 BYOK 키 설정에서 Gemini API 키를 입력해 주세요.');
+  }
 
   return new GoogleGenAI({
     apiKey,
     httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
   });
+}
+
+async function generateWithFreeTierFallback(ai: GoogleGenAI, params: { contents: any; config?: any }) {
+  for (const model of [FREE_TIER_GEMINI_MODEL, FREE_TIER_FALLBACK_MODEL]) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: params.contents,
+        config: params.config,
+      });
+      if (response && response.text) return response;
+    } catch (err: any) {
+      console.warn(`[Gemini Free-Tier Fallback] ${model} failed:`, err?.message);
+    }
+  }
+  throw new Error('Gemini 무료 등급 모델 호출에 실패했습니다.');
 }
 
 function getKoreanByteLength(str: string): number {
@@ -184,9 +209,8 @@ app.post('/api/gemini/analyze', async (req, res) => {
 
     const userPrompt = `Passage (${displayLesson} ${displayItemNo}: ${displayTitle}): ${passage.slice(0, 800)}`;
 
-    // Strategy 2: Model Tiering - Use gemini-1.5-flash for lightweight fast analysis (90% cheaper)
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+    // Strategy 2: Model Tiering - Use Gemini free-tier model with fallback
+    const response = await generateWithFreeTierFallback(ai, {
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction,
@@ -238,11 +262,8 @@ Answer concisely in Korean teacher tone.`;
 
     const lastMsgText = history?.filter((m: any) => m.role === 'user').pop()?.text || '지문 핵심 분석해줘';
 
-    // Strategy 2: Model Tiering (Use 1.5-flash for Hint Level 1 & 2, 3.6-flash for Level 3)
-    const selectedModel = hintLevel === 3 ? 'gemini-3.6-flash' : 'gemini-1.5-flash';
-
-    const response = await ai.models.generateContent({
-      model: selectedModel,
+    // Strategy 2: Free-Tier Gemini model with fallback
+    const response = await generateWithFreeTierFallback(ai, {
       contents: [{ role: 'user', parts: [{ text: `Question: "${lastMsgText}"` }] }],
       config: { systemInstruction: systemPrompt, temperature: 0.3 },
     });
@@ -701,8 +722,7 @@ Return JSON: { "type", "difficulty", "question" (Korean), "modifiedPassage", "op
 
   try {
     const ai = getGenAIClient(customApiKey);
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+    const response = await generateWithFreeTierFallback(ai, {
       contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nOriginal Passage (${lesson || ''} ${itemNo || ''}):\n${passageForAI}\n\nTarget: ${targetQuestionType}, Difficulty: ${difficulty}` }] }],
       config: { responseMimeType: 'application/json' },
     });
@@ -736,23 +756,51 @@ Return JSON: { "type", "difficulty", "question" (Korean), "modifiedPassage", "op
   }
 });
 
-// 4. Student Report Endpoint
+// 4. Student Report Endpoint (BYOK & Gemini Free-Tier)
 app.post('/api/gemini/student-report', async (req, res) => {
-  const { student } = req.body;
-  const name = student?.name || '김학생';
-  const sampleSetek = `'2027 진로영어' 지문 분석 워크북과 소크라테스 AI 튜터를 적극 활용하여 영어 독해력과 지문 구조 파악 능력을 종합적으로 신장함. 특히 EBS 수능 연계 지문 학습 과정에서 가주어-진주어 구문 및 역접 연결어를 통한 논지 전환 파악에 남다른 메타인지적 탐구열을 보임. 소크라테스 튜터링 3단계 힌트 시스템을 단계별로 탐색하며 스스로 문맥상 어휘의 함축적 의미를 도출해내는 주도적인 학습 태도를 형성함. 수능 변형문제 생성기 기능을 응용하여 빈칸 추론 및 어법성 판단 문항을 직접 풀이하고 분석함으로써 텍스트의 논리적 결속성을 파악하는 비판적 사고력이 매우 우수함.`;
+  const { student, socraticLogs = [], customApiKey } = req.body;
+  const studentEmail = student?.email || 'student@simin.hs.kr';
+  const studentName = student?.name || '학습자';
+  const fallbackSetek = `'2027 진로영어' 지문 분석 워크북과 소크라테스 튜터를 활용해 영어 독해력과 지문 구조 파악 능력을 신장함. EBS 연계 지문 학습 과정에서 핵심 구문과 연결어 기반 논지 전환을 근거로 문맥적 의미를 추론하는 태도를 보임. 3단계 힌트 질의를 단계별로 탐색해 어휘의 함축적 의미를 도출하고, 변형문항 풀이로 텍스트의 논리적 결속성을 분석하는 역량을 기름.`;
 
-  res.json({
-    success: true,
-    data: {
-      studentEmail: student?.email || 'student@simin.hs.kr',
-      studentName: name,
-      personalizedFeedback: `${name} 학생은 EBS 진로영어 지문 완독 및 소크라테스 튜터 질의를 통해 적극적인 구문 탐구를 수행하였습니다.`,
-      schoolRecordSetek: sampleSetek,
-      byteCount: getKoreanByteLength(sampleSetek),
-      keyCompetencies: ['주도적 메타인지 탐구', '논리적 지문 구조 분석', '수능 변형 문제 응용력'],
-    },
-  });
+  try {
+    const ai = getGenAIClient(customApiKey);
+    const prompt = `You are a Korean high school English teacher writing an objective NEIS Setek draft (800-900 bytes, no school/university/platform brand names, no student name as subject).
+Student stats: logins=${student?.loginCount || 1}, dwellMin=${student?.totalDwellTimeMinutes || 5}, completed=${student?.completedPassagesCount || 0}, generated=${student?.transformedQuestionsGenerated || 0}, socratic=${student?.socraticQuestionsCount || 0}, logs=${JSON.stringify((socraticLogs || []).slice(0, 5))}.
+Return JSON: { "personalizedFeedback": "Korean 2 sentences", "schoolRecordSetek": "Korean ~ham/~im ending 800-900 bytes", "keyCompetencies": ["tag1", "tag2", "tag3"] }`;
+
+    const response = await generateWithFreeTierFallback(ai, {
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { responseMimeType: 'application/json', temperature: 0.3 },
+    });
+
+    const parsed = JSON.parse(cleanJsonString(response.text || '{}'));
+    const setek = String(parsed.schoolRecordSetek || fallbackSetek);
+    res.json({
+      success: true,
+      data: {
+        studentEmail,
+        studentName,
+        personalizedFeedback: parsed.personalizedFeedback || `${studentName} 학습자는 진로영어 지문 분석과 소크라테스 문답을 꾸준히 수행했습니다.`,
+        schoolRecordSetek: setek,
+        byteCount: getKoreanByteLength(setek),
+        keyCompetencies: Array.isArray(parsed.keyCompetencies) ? parsed.keyCompetencies : ['주도적 구문 탐구', '논리적 독해 구조 분석', '수능 변형 응용력'],
+      },
+    });
+  } catch {
+    res.json({
+      success: true,
+      fallback: true,
+      data: {
+        studentEmail,
+        studentName,
+        personalizedFeedback: `${studentName} 학습자는 EBS 진로영어 지문 완독 및 소크라테스 튜터 질의를 통해 구문 탐구를 수행했습니다.`,
+        schoolRecordSetek: fallbackSetek,
+        byteCount: getKoreanByteLength(fallbackSetek),
+        keyCompetencies: ['주도적 메타인지 탐구', '논리적 지문 구조 분석', '수능 변형 문제 응용력'],
+      },
+    });
+  }
 });
 
 // 5. Ingest Endpoint (New Passage Auto Parsing)
@@ -785,8 +833,7 @@ app.post('/api/gemini/ingest', async (req, res) => {
     const userPrompt = `Passage (${lesson} ${itemNo}):
 ${cleanPassage}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+    const response = await generateWithFreeTierFallback(ai, {
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: systemPrompt,
@@ -829,6 +876,106 @@ ${cleanPassage}`;
     };
     res.json({ success: true, data: fallbackIngest, fallback: true });
   }
+});
+
+/* ──────── Central Student Analytics Store & REST APIs (Vercel /tmp backed) ──────── */
+const DATA_FILE_PATH = process.env.VERCEL
+  ? path.join('/tmp', 'data_analytics_store.json')
+  : path.join(process.cwd(), 'data_analytics_store.json');
+
+interface AnalyticsStore {
+  students: any[];
+  socraticLogs: any[];
+  reflections: any[];
+}
+
+function loadStoreFromFile(): AnalyticsStore {
+  try {
+    if (fs.existsSync(DATA_FILE_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(DATA_FILE_PATH, 'utf-8'));
+      const rawStudents = Array.isArray(parsed.students) ? parsed.students : [];
+      return {
+        students: rawStudents.filter((s: any) => s.email && s.email.toLowerCase() !== 'student@simin.hs.kr'),
+        socraticLogs: Array.isArray(parsed.socraticLogs) ? parsed.socraticLogs : [],
+        reflections: Array.isArray(parsed.reflections) ? parsed.reflections : [],
+      };
+    }
+  } catch {}
+  return { students: [], socraticLogs: [], reflections: [] };
+}
+
+const centralStore: AnalyticsStore = loadStoreFromFile();
+
+function saveStoreToFile(): void {
+  try {
+    fs.writeFileSync(DATA_FILE_PATH, JSON.stringify(centralStore, null, 2), 'utf-8');
+  } catch {}
+}
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'csat-agent-1', freeTierModel: FREE_TIER_GEMINI_MODEL });
+});
+
+app.post('/api/analytics/sync-student', (req, res) => {
+  const student = req.body;
+  if (!student || !student.email) {
+    return res.status(400).json({ success: false, error: 'Student email is required' });
+  }
+  const cleanEmail = student.email.trim().toLowerCase();
+  const idx = centralStore.students.findIndex(s => s.email.toLowerCase() === cleanEmail);
+  if (idx >= 0) {
+    centralStore.students[idx] = { ...centralStore.students[idx], ...student };
+  } else {
+    centralStore.students.unshift({
+      id: student.id || `std-${Date.now()}`,
+      email: cleanEmail,
+      name: student.name || cleanEmail.split('@')[0],
+      loginCount: student.loginCount || 1,
+      lastLogin: student.lastLogin || new Date().toLocaleString('ko-KR'),
+      totalDwellTimeMinutes: student.totalDwellTimeMinutes || 5,
+      completedPassagesCount: student.completedPassagesCount || 0,
+      transformedQuestionsGenerated: student.transformedQuestionsGenerated || 0,
+      quizAccuracyPercentage: student.quizAccuracyPercentage || 100,
+      socraticQuestionsCount: student.socraticQuestionsCount || 0,
+      status: 'online',
+    });
+  }
+  saveStoreToFile();
+  res.json({ success: true, count: centralStore.students.length });
+});
+
+app.get('/api/analytics/students', (_req, res) => {
+  res.json({ success: true, data: centralStore.students });
+});
+
+app.post('/api/analytics/socratic-log', (req, res) => {
+  const log = req.body;
+  if (log && log.studentEmail) {
+    centralStore.socraticLogs.unshift(log);
+    saveStoreToFile();
+  }
+  res.json({ success: true, count: centralStore.socraticLogs.length });
+});
+
+app.get('/api/analytics/socratic-logs', (_req, res) => {
+  res.json({ success: true, data: centralStore.socraticLogs });
+});
+
+app.post('/api/analytics/reflection', (req, res) => {
+  const ref = req.body;
+  if (ref && ref.studentEmail) {
+    centralStore.reflections.unshift(ref);
+    saveStoreToFile();
+  }
+  res.json({ success: true, count: centralStore.reflections.length });
+});
+
+app.get('/api/analytics/reflections', (_req, res) => {
+  res.json({ success: true, data: centralStore.reflections });
+});
+
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ success: false, error: `요청하신 API 엔드포인트(${req.originalUrl})를 찾을 수 없습니다.` });
 });
 
 export default function handler(req: VercelRequest, res: VercelResponse) {

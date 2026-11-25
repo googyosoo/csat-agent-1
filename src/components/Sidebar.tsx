@@ -14,6 +14,7 @@ interface SidebarProps {
   setFilterLesson: (lesson: string) => void;
   onOpenIngestModal: () => void;
   authUser?: User | null;
+  isGuestMode?: boolean;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
   selectedSubjectId?: string;
@@ -30,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setFilterLesson,
   onOpenIngestModal,
   authUser,
+  isGuestMode = false,
   isMobileOpen = false,
   onCloseMobile,
   selectedSubjectId = 'jinro',
@@ -58,7 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0 h-screen overflow-y-auto transition-transform duration-300 ${
+        className={`w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0 h-[100dvh] md:h-screen overflow-y-auto transition-transform duration-300 ${
           isMobileOpen
             ? 'fixed inset-y-0 left-0 translate-x-0 z-50 shadow-2xl'
             : 'fixed inset-y-0 left-0 -translate-x-full md:relative md:translate-x-0 z-20'
@@ -179,6 +181,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Passage Selector & Add New Passage */}
       <div className="p-3 border-t border-slate-800 space-y-2">
+        {isGuestMode && !authUser && (
+          <div className="px-2.5 py-2 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-[11px] text-cyan-200 flex items-center space-x-2">
+            <i className="fa-solid fa-compass text-cyan-400 shrink-0"></i>
+            <span>게스트 체험 모드 (학습 기록은 브라우저에 임시 저장)</span>
+          </div>
+        )}
         {isAdmin && (
           <button
             type="button"

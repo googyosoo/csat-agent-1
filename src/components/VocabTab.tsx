@@ -290,7 +290,7 @@ export const VocabTab: React.FC<VocabTabProps> = ({ selectedPassage, onSpeak }) 
                   ))
                 ) : (
                   <p className="text-xs text-slate-500 italic p-6 text-center bg-slate-950 rounded-xl border border-slate-800">
-                    등록된 구문 노특가 없습니다.
+                    등록된 구문 노트가 없습니다.
                   </p>
                 )}
               </div>
